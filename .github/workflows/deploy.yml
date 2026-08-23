@@ -1,0 +1,62 @@
+name: Deploy Ascend to GitHub Pages
+
+on:
+  push:
+    branches: [main, claude/app-deploy-role-access-8trbq9]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a queued run supersedes an older one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Pages serves the site from https://<owner>.github.io/<repo>/
+  BASE_PATH: /${{ github.event.repository.name }}/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check every module imports what it uses
+        run: npm run check
+
+      - name: Check the access rules still hold
+        run: |
+          npx playwright install --with-deps chromium
+          npx vite preview --port 4173 &
+          URL="http://localhost:4173$BASE_PATH"
+          npx wait-on "$URL" -t 60000
+          SMOKE_URL="$URL" npm run smoke
+          SMOKE_URL="$URL" npm run flow
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
