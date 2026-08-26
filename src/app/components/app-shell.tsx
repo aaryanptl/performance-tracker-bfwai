@@ -2,9 +2,9 @@
 
 import { ChevronsUpDown, LogOut, Mountain } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
+import { signOut } from "@/app/signin/actions";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
@@ -26,7 +26,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NAVIGATION, ROUTE_TITLES } from "@/data/navigation";
 import { initials } from "@/data/people";
@@ -64,10 +63,8 @@ function titleForPath(pathname: string) {
 
 function WorkspaceSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { person, signOut } = useSession();
+  const { person } = useSession();
   const { setOpenMobile } = useSidebar();
-  if (!person) return null;
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -126,7 +123,7 @@ function WorkspaceSidebar() {
             <SidebarMenuButton
               size="lg"
               tooltip={`${person.name} · ${person.role}`}
-              render={<button type="button" onClick={() => router.push("/signin")} />}
+              render={<Link href="/change-password" />}
             >
               <span className="grid size-8 place-items-center rounded-full bg-primary/12 font-semibold text-primary">
                 {initials(person.name)}
@@ -141,21 +138,12 @@ function WorkspaceSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Sign out"
-              render={
-                <button
-                  type="button"
-                  onClick={() => {
-                    signOut();
-                    router.replace("/signin");
-                  }}
-                />
-              }
-            >
-              <LogOut />
-              <span>Sign out</span>
-            </SidebarMenuButton>
+            <form action={signOut}>
+              <SidebarMenuButton tooltip="Sign out" render={<button type="submit" />}>
+                <LogOut />
+                <span>Sign out</span>
+              </SidebarMenuButton>
+            </form>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -192,41 +180,7 @@ function WorkspaceHeader() {
   );
 }
 
-function WorkspaceLoading() {
-  return (
-    <div className="flex min-h-svh w-full">
-      <div className="hidden w-64 border-r p-4 md:block">
-        <Skeleton className="mb-8 h-10 w-36" />
-        <div className="space-y-3">
-          {["nav-1", "nav-2", "nav-3", "nav-4", "nav-5", "nav-6", "nav-7", "nav-8", "nav-9"].map(
-            (key) => (
-              <Skeleton key={key} className="h-9 w-full" />
-            ),
-          )}
-        </div>
-      </div>
-      <div className="flex-1 p-8">
-        <Skeleton className="mb-8 h-10 w-72" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {["metric-1", "metric-2", "metric-3"].map((key) => (
-            <Skeleton key={key} className="h-36" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const { person, ready } = useSession();
-
-  useEffect(() => {
-    if (ready && !person) router.replace("/signin");
-  }, [person, ready, router]);
-
-  if (!ready || !person) return <WorkspaceLoading />;
-
   return (
     <TooltipProvider>
       <SidebarProvider>
