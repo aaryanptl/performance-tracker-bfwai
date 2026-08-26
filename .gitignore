@@ -1,5 +1,10 @@
 node_modules/
-dist/
+.next/
+out/
+.pnpm-store/
+tsconfig.tsbuildinfo
+output/
+coverage/
 .extract/
 *.local
 .DS_Store
