@@ -30,7 +30,7 @@ export function ChangePasswordPanel() {
             <KeyRound className="size-5" /> Choose a new password
           </CardTitle>
           <CardDescription>
-            Replace the temporary password before opening your performance workspace.
+            Update your password whenever you want from your profile menu.
           </CardDescription>
         </CardHeader>
         <CardContent>

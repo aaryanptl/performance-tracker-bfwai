@@ -1,25 +1,55 @@
-import { ClipboardCheck } from "lucide-react";
-
 import { PageHeader } from "@/app/components/page-header";
+import { RatingTraps } from "@/app/components/rating-traps";
 import { ScopedPeopleTable } from "@/app/components/scoped-people-table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ScoringGuideDialog } from "@/app/components/scoring-guide-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ACTIVE_CYCLE, SCORE_BANDS } from "@/data/performance";
+
+const STEPS = [
+  "Read Part 1 — the Impact Statement, alongside what the person recorded as their actuals.",
+  "Score each goal 0.0–1.0 against its target, using the named data source. Delivered fully = 1.0; delivered 80% of the target ≈ 0.8.",
+  "The average converts to Score 1 on the fixed bands below.",
+  "Discuss the five competencies orally against the written commitments and the library's level descriptions, then record one overall rating as Score 2.",
+  "Write the verified impact summary and the development needs, choose a recommendation, and sign. The quarterly score is computed, not typed.",
+];
 
 export default function ScoringPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Q1 review"
-        title="Scoring"
-        description="Use outcomes, evidence, monthly conversations, and role expectations to reach a fair rating."
+        eyebrow="Every quarter end"
+        title="Quarterly scoring"
+        description="The full review and feedback session happens at the half-year — do not confuse the two. Read the Impact Statement first, verify it against the data sources and your check-in records, then score."
+        action={<ScoringGuideDialog />}
       />
-      <Alert className="mb-6">
-        <ClipboardCheck />
-        <AlertTitle>Reviews are evidence-led</AlertTitle>
-        <AlertDescription>
-          Start from the agreed charter and observed behaviours. Calibration can adjust consistency
-          across teams, but should never invent evidence.
-        </AlertDescription>
-      </Alert>
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>How to work down the screen</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <ol className="grid list-decimal gap-2 pl-5 text-sm leading-6 text-muted-foreground marker:text-muted-foreground">
+              {STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="text-sm leading-6">
+              <span className="font-medium">Bands:</span>{" "}
+              <span className="text-muted-foreground">
+                {SCORE_BANDS.map((band) => `${band.range} → ${band.rating}`).join(" · ")}
+              </span>
+            </p>
+            <p className="text-sm leading-6">
+              <span className="font-medium">
+                Quarterly score = (Score 1 × {ACTIVE_CYCLE.weights.okr}) + (Score 2 ×{" "}
+                {ACTIVE_CYCLE.weights.competency})
+              </span>
+              <span className="text-muted-foreground">, calibrated across all coaches before release.</span>
+            </p>
+          </CardContent>
+        </Card>
+        <RatingTraps />
+      </div>
       <ScopedPeopleTable actionBase="/coaching/reviews" />
     </>
   );

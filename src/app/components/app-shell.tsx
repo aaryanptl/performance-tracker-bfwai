@@ -1,11 +1,13 @@
 "use client";
 
-import { ChevronsUpDown, LogOut, Mountain } from "lucide-react";
+import { ArrowLeft, ChevronsUpDown, KeyRound, LogOut, Mountain } from "lucide-react";
+import { Menu } from "@base-ui/react/menu";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { signOut } from "@/app/signin/actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -59,6 +61,19 @@ function titleForPath(pathname: string) {
     };
   }
   return { title: "Ascend", description: "Performance management for Build Fast with AI." };
+}
+
+function backHrefForPath(pathname: string) {
+  if (pathname === "/") return null;
+  if (pathname === "/charter/edit") return "/charter";
+  if (pathname.startsWith("/admin/") && pathname !== "/admin/dashboard") {
+    return "/admin/dashboard";
+  }
+  if (pathname.startsWith("/coaching/check-ins/")) return "/coaching/coachees";
+  if (pathname.startsWith("/coaching/reviews/")) return "/coaching/approvals";
+  if (pathname.startsWith("/coaching/coachees/")) return "/coaching/coachees";
+  if (pathname.startsWith("/records/")) return "/records";
+  return "/";
 }
 
 function WorkspaceSidebar() {
@@ -120,30 +135,53 @@ function WorkspaceSidebar() {
         <Separator />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              tooltip={`${person.name} · ${person.role}`}
-              render={<Link href="/change-password" />}
-            >
-              <span className="grid size-8 place-items-center rounded-full bg-primary/12 font-semibold text-primary">
-                {initials(person.name)}
-              </span>
-              <span className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-medium">{person.name}</span>
-                <span className="truncate text-xs text-muted-foreground capitalize">
-                  {person.role}
+            <Menu.Root>
+              <Menu.Trigger
+                render={
+                  <SidebarMenuButton size="lg" tooltip={`${person.name} · ${person.role}`} />
+                }
+              >
+                <span className="grid size-8 place-items-center rounded-full bg-primary/12 font-semibold text-primary">
+                  {initials(person.name)}
                 </span>
-              </span>
-              <ChevronsUpDown className="ml-auto" />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <form action={signOut}>
-              <SidebarMenuButton tooltip="Sign out" render={<button type="submit" />}>
-                <LogOut />
-                <span>Sign out</span>
-              </SidebarMenuButton>
-            </form>
+                <span className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-medium">{person.name}</span>
+                  <span className="truncate text-xs text-muted-foreground capitalize">
+                    {person.role}
+                  </span>
+                </span>
+                <ChevronsUpDown className="ml-auto" />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner side="right" align="end" sideOffset={8} className="z-50">
+                  <Menu.Popup className="min-w-56 rounded-xl border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+                    <div className="px-3 py-2">
+                      <p className="truncate text-sm font-medium">{person.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{person.email}</p>
+                    </div>
+                    <Menu.Separator className="my-1 h-px bg-border" />
+                    <Menu.LinkItem
+                      render={<Link href="/change-password" />}
+                      closeOnClick
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none data-highlighted:bg-muted"
+                    >
+                      <KeyRound className="size-4" />
+                      Change password
+                    </Menu.LinkItem>
+                    <form action={signOut}>
+                      <Menu.Item
+                        nativeButton
+                        render={<button type="submit" />}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive outline-none data-highlighted:bg-destructive/10"
+                      >
+                        <LogOut className="size-4" />
+                        Sign out
+                      </Menu.Item>
+                    </form>
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -155,10 +193,24 @@ function WorkspaceSidebar() {
 function WorkspaceHeader() {
   const pathname = usePathname();
   const route = titleForPath(pathname);
+  const backHref = backHrefForPath(pathname);
 
   return (
     <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur-xl sm:px-6">
       <SidebarTrigger />
+      {backHref ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
+          render={<Link href={backHref} />}
+          aria-label="Go back"
+          title="Go back"
+        >
+          <ArrowLeft />
+          <span className="hidden sm:inline">Back</span>
+        </Button>
+      ) : null}
       <Separator orientation="vertical" className="h-5" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-heading text-sm font-semibold">{route.title}</p>

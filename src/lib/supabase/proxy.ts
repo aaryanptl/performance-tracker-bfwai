@@ -48,18 +48,12 @@ export async function updateSession(request: NextRequest) {
   const claims = data?.claims;
   const pathname = request.nextUrl.pathname;
   const isSignIn = pathname === "/signin";
-  const isPasswordSetup = pathname === "/change-password";
-  const mustChangePassword = claims?.app_metadata?.must_change_password === true;
 
   if (!claims && !isSignIn) {
     return redirectWithSession(request, supabaseResponse, "/signin");
   }
 
-  if (claims && mustChangePassword && !isPasswordSetup) {
-    return redirectWithSession(request, supabaseResponse, "/change-password");
-  }
-
-  if (claims && !mustChangePassword && isSignIn) {
+  if (claims && isSignIn) {
     return redirectWithSession(request, supabaseResponse, "/");
   }
 

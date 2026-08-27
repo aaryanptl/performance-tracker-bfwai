@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Save, Send } from "lucide-react";
+import { Check, Save } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { RATINGS } from "@/data/performance";
+import { APPROVER_LABEL, CHECKIN_STAGES, RATINGS, RECOMMENDATIONS } from "@/data/performance";
 
 function SavedBadge({ saved }: { saved: boolean }) {
   return saved ? (
@@ -29,90 +28,24 @@ function SavedBadge({ saved }: { saved: boolean }) {
   ) : null;
 }
 
-export function CharterForm() {
-  const [saved, setSaved] = useState(false);
-  const save = () => {
-    window.localStorage.setItem("ascend:charter:draft", new Date().toISOString());
-    setSaved(true);
-  };
+function Field({
+  id,
+  label,
+  hint,
+  placeholder,
+  rows = 4,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  placeholder: string;
+  rows?: number;
+}) {
   return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Cycle intent</CardTitle>
-          <CardDescription>
-            Start with the change your work should create, then define evidence that makes the
-            outcome unambiguous.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <div className="grid gap-2">
-            <Label htmlFor="focus">Primary focus</Label>
-            <Input id="focus" placeholder="What is the most important outcome for this cycle?" />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="context">Why this matters</Label>
-            <Textarea
-              id="context"
-              rows={4}
-              placeholder="Connect the outcome to the customer, team, or business priority."
-            />
-          </div>
-        </CardContent>
-      </Card>
-      {[1, 2, 3].map((number) => (
-        <Card key={number}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Goal {number}</CardTitle>
-              <Badge variant="outline">{number === 1 ? "Required" : "Optional"}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-5 md:grid-cols-2">
-            <div className="grid gap-2 md:col-span-2">
-              <Label htmlFor={`goal-${number}`}>Outcome</Label>
-              <Input
-                id={`goal-${number}`}
-                placeholder="Deliver a measurable result, not a task list"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`metric-${number}`}>Success measure</Label>
-              <Input id={`metric-${number}`} placeholder="Metric and target" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`weight-${number}`}>Weight</Label>
-              <NativeSelect
-                id={`weight-${number}`}
-                defaultValue={number === 1 ? "40" : "30"}
-                className="w-full"
-              >
-                <NativeSelectOption value="20">20%</NativeSelectOption>
-                <NativeSelectOption value="30">30%</NativeSelectOption>
-                <NativeSelectOption value="40">40%</NativeSelectOption>
-              </NativeSelect>
-            </div>
-            <div className="grid gap-2 md:col-span-2">
-              <Label htmlFor={`evidence-${number}`}>Evidence source</Label>
-              <Textarea
-                id={`evidence-${number}`}
-                placeholder="Where will the reviewer find trustworthy evidence?"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <SavedBadge saved={saved} />
-        <Button variant="outline" onClick={save}>
-          <Save />
-          Save draft
-        </Button>
-        <Button onClick={save}>
-          <Send />
-          Send for review
-        </Button>
-      </div>
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <p className="-mt-1 text-xs leading-5 text-muted-foreground">{hint}</p>
+      <Textarea id={id} rows={rows} placeholder={placeholder} />
     </div>
   );
 }
@@ -122,51 +55,46 @@ export function ImpactForm() {
   return (
     <Tabs defaultValue="q1">
       <TabsList className="mb-5">
-        <TabsTrigger value="q1">Q1 · Sep–Nov</TabsTrigger>
-        <TabsTrigger value="q2">Q2 · Dec–Feb</TabsTrigger>
+        <TabsTrigger value="q1">Q1 · Sep–Nov 2026</TabsTrigger>
+        <TabsTrigger value="q2">Q2 · Dec–Feb 2027</TabsTrigger>
       </TabsList>
       {["q1", "q2"].map((quarter) => (
         <TabsContent key={quarter} value={quarter}>
           <Card>
             <CardHeader>
-              <CardTitle>{quarter.toUpperCase()} impact statement</CardTitle>
-              <CardDescription>
-                Use specific evidence. Name what changed because of the work, not only what was
-                completed.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Part 1 — written by you</CardTitle>
+                  <CardDescription className="mt-1">
+                    Your coach cannot see this until you share it. Once shared it becomes read-only.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline">Not shared yet</Badge>
+              </div>
             </CardHeader>
             <CardContent className="grid gap-5">
-              <div className="grid gap-2">
-                <Label htmlFor={`${quarter}-outcomes`}>Outcomes delivered</Label>
-                <Textarea
-                  id={`${quarter}-outcomes`}
-                  rows={5}
-                  placeholder="What measurable customer, product, revenue, or team outcome changed?"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor={`${quarter}-evidence`}>Evidence and links</Label>
-                <Textarea
-                  id={`${quarter}-evidence`}
-                  rows={4}
-                  placeholder="Metrics, customer feedback, shipped work, or other verifiable evidence"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor={`${quarter}-learning`}>Learning carried forward</Label>
-                <Textarea
-                  id={`${quarter}-learning`}
-                  rows={3}
-                  placeholder="What will you repeat, change, or stop next quarter?"
-                />
-              </div>
+              <Field
+                id={`${quarter}-results`}
+                label="Impact created — results against my goals"
+                hint="What moved, by how much, against which target. Name the evidence your coach can verify."
+                placeholder="e.g. Inbound response within 48h moved from 70% to 95% (CRM export, Sep–Nov). Closed ₹16L of the ₹20L target…"
+                rows={5}
+              />
+              <Field
+                id={`${quarter}-behaviours`}
+                label="Competency commitments I lived — and how"
+                hint="Take each of your five commitments and say, concretely, what you did."
+                placeholder="e.g. Communication — sent the weekly written pipeline update 12 of 12 weeks…"
+                rows={5}
+              />
             </CardContent>
             <CardFooter className="justify-end gap-3 border-t">
               <SavedBadge saved={saved} />
-              <Button onClick={() => setSaved(true)}>
+              <Button variant="outline" onClick={() => setSaved(true)}>
                 <Save />
-                Save statement
+                Save draft
               </Button>
+              <Button onClick={() => setSaved(true)}>Share with my coach</Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -180,37 +108,29 @@ export function CheckInForm({ personName }: { personName: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Monthly conversation with {personName}</CardTitle>
+        <CardTitle>The conversation with {personName}</CardTitle>
         <CardDescription>
-          Use this structure to support a useful conversation; do not turn it into a status report.
+          15 minutes on the four-stage framework. Recorded by the coach, in the room. No ratings are
+          given in a check-in.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <div className="grid gap-2">
-          <Label htmlFor="progress">Progress worth recognising</Label>
-          <Textarea
-            id="progress"
-            placeholder="What moved, and what should be recognised specifically?"
+        {CHECKIN_STAGES.map((stage) => (
+          <Field
+            key={stage.key}
+            id={`checkin-${stage.key}`}
+            label={`${stage.title} · ${stage.minutes} min`}
+            hint={stage.prompt}
+            placeholder="Recorded by the coach, in the room."
+            rows={3}
           />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="blockers">Reality and blockers</Label>
-          <Textarea id="blockers" placeholder="What is in the way? What has already been tried?" />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="support">Support the coach will arrange</Label>
-          <Textarea id="support" placeholder="Name the support, owner, and date." />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="commitment">Commitment before the next check-in</Label>
-          <Textarea id="commitment" placeholder="A specific next action with a clear owner." />
-        </div>
+        ))}
       </CardContent>
       <CardFooter className="justify-end gap-3 border-t">
         <SavedBadge saved={saved} />
         <Button onClick={() => setSaved(true)}>
           <Save />
-          Save check-in
+          Sign and share with {personName}
         </Button>
       </CardFooter>
     </Card>
@@ -221,40 +141,75 @@ export function ReviewForm({ personName }: { personName: string }) {
   const [saved, setSaved] = useState(false);
   return (
     <div className="space-y-5">
-      {[
-        ["Goal outcomes", "Rate delivery against the agreed success measures."],
-        ["Role competencies", "Rate behaviours and craft against the person's current level."],
-      ].map(([title, description]) => (
-        <Card key={title}>
-          <CardHeader>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5 md:grid-cols-[220px_1fr]">
-            <div className="grid gap-2">
-              <Label>Rating for {personName}</Label>
-              <NativeSelect defaultValue="3" className="w-full">
-                {RATINGS.map((rating) => (
-                  <NativeSelectOption key={rating.value} value={String(rating.value)}>
-                    {rating.value} · {rating.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="grid gap-2">
-              <Label>Evidence and rationale</Label>
-              <Textarea placeholder="Reference outcomes, behaviours, and examples observed during the quarter." />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-      <div className="flex items-center justify-end gap-3">
-        <SavedBadge saved={saved} />
-        <Button onClick={() => setSaved(true)}>
-          <Save />
-          Save review
-        </Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Score 2 — how it was delivered</CardTitle>
+          <CardDescription>
+            Discussed orally against the written commitments, then one overall rating out of 5.
+            Anchor it in specifics from your check-in records — moments, deliverables, behaviours.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 md:grid-cols-[260px_1fr]">
+          <div className="grid gap-2">
+            <Label htmlFor="score-2">Score 2 for {personName}</Label>
+            <NativeSelect id="score-2" defaultValue="" className="w-full">
+              <NativeSelectOption value="">Not yet rated</NativeSelectOption>
+              {RATINGS.map((rating) => (
+                <NativeSelectOption key={rating.value} value={String(rating.value)}>
+                  {rating.value} — {rating.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+          <Field
+            id="score-2-evidence"
+            label="Evidence discussed"
+            hint="Reference the commitments, the observed behaviour, and examples from the quarter."
+            placeholder="What was said in the conversation, and the specifics it rested on."
+            rows={3}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Part 2 — coach review</CardTitle>
+          <CardDescription>
+            Written after scoring, and released to {personName} once {APPROVER_LABEL} signs off.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          <Field
+            id="impact-summary"
+            label="1 · The impact this person has created — your verified summary"
+            hint="Verified against the charter, the check-in records and the named data sources."
+            placeholder="What changed because of this person's work this quarter."
+          />
+          <Field
+            id="development-needs"
+            label="2 · Development needs — and the training, exposure or support to be provided"
+            hint="You own one development action per coachee per cycle. Name it here and follow it through."
+            placeholder="The gap, and the specific support you will arrange for it."
+          />
+          <div className="grid gap-2">
+            <Label htmlFor="recommendation">3 · Recommendation</Label>
+            <NativeSelect id="recommendation" defaultValue="" className="w-full sm:w-80">
+              <NativeSelectOption value="">Not recorded</NativeSelectOption>
+              {RECOMMENDATIONS.map((recommendation) => (
+                <NativeSelectOption key={recommendation} value={recommendation}>
+                  {recommendation}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+        </CardContent>
+        <CardFooter className="justify-end gap-3 border-t">
+          <SavedBadge saved={saved} />
+          <Button onClick={() => setSaved(true)}>
+            <Save />
+            Sign and send to calibration
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

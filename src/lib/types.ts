@@ -40,15 +40,50 @@ export interface NavigationGroup {
   items: NavigationItem[];
 }
 
-export interface Competency {
+/** A competency as it appears in the goal & competency library. */
+export interface LibraryCompetency {
+  unit: string;
   name: string;
-  category: string;
-  description: string;
-  evidence: string;
+  /** Fixed competencies every charter carries; the rest are chosen with a coach. */
+  mandatory: boolean;
+  definition: string;
+  measure: string;
+  /** What a 5, a 3 and a 1 look like for this competency. */
+  l5: string;
+  l3: string;
+  l1: string;
+}
+
+/** An example objective + key result from the library, ready to start a goal from. */
+export interface OkrExample {
+  unit: string;
+  objective: string;
+  kr: string;
+  source: string;
 }
 
 export interface Rating {
   value: number;
   label: string;
   description: string;
+}
+
+export interface CycleStage {
+  id: string;
+  title: string;
+  detail: string;
+  state: "open" | "later";
+}
+
+export interface CheckInStage {
+  key: string;
+  title: string;
+  minutes: number;
+  prompt: string;
+}
+
+export interface Level {
+  value: number;
+  label: string;
+  hint: string;
 }

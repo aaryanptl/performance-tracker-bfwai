@@ -1,15 +1,28 @@
-import { CalendarDays, CircleGauge, Goal, MessageSquareText, Sparkles } from "lucide-react";
+import { Goal } from "lucide-react";
 import Link from "next/link";
 
-import { MetricCard } from "@/app/components/metric-card";
+import { CycleTimeline } from "@/app/components/cycle-timeline";
 import { PageHeader } from "@/app/components/page-header";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress, ProgressLabel } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { ACTIVE_CYCLE } from "@/data/performance";
+
+const NEXT_ACTIONS = [
+  {
+    href: "/charter/edit",
+    title: "Draft your Goal Charter",
+    detail: `Up to ${ACTIVE_CYCLE.maxGoals} measurable goals and ${ACTIVE_CYCLE.maxGoals} competencies, before the cycle starts.`,
+    actionLabel: "Open",
+  },
+] as const;
 
 export default function OverviewPage() {
   return (
@@ -25,121 +38,83 @@ export default function OverviewPage() {
           </Button>
         }
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Goal charter"
-          value="Not started"
-          detail="Draft up to five measurable outcomes."
-          icon={Goal}
-          badge="Action needed"
-        />
-        <MetricCard
-          label="Monthly check-ins"
-          value="0 / 6"
-          detail="No conversations recorded in this cycle."
-          icon={MessageSquareText}
-        />
-        <MetricCard
-          label="Impact statements"
-          value="0 / 2"
-          detail="Capture evidence at the end of each quarter."
-          icon={Sparkles}
-        />
-        <MetricCard
-          label="Current score"
-          value="Pending"
-          detail="Released after the quarterly review."
-          icon={CircleGauge}
-        />
-      </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.45fr_1fr]">
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle>Cycle progress</CardTitle>
-                <CardDescription>
-                  {ACTIVE_CYCLE.start} to {ACTIVE_CYCLE.end}
-                </CardDescription>
-              </div>
-              <Badge>{ACTIVE_CYCLE.status}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Progress value={12}>
-              <ProgressLabel>Time elapsed</ProgressLabel>
-              <span className="ml-auto text-sm tabular-nums text-muted-foreground">12%</span>
-            </Progress>
-            <Separator />
-            <div className="grid gap-5 sm:grid-cols-3">
-              {[
-                { label: "Goal window", value: "21–31 Aug", detail: "Draft and agree outcomes" },
-                { label: "Q1 review", value: "30 Nov", detail: "Evidence and score" },
-                { label: "Cycle closes", value: "28 Feb", detail: "Final review and record" },
-              ].map((item) => (
-                <div key={item.label}>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {item.label}
-                  </p>
-                  <p className="mt-2 font-heading text-lg font-semibold">{item.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.15fr]">
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>What needs you next</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {NEXT_ACTIONS.map((action) => (
+                <div key={action.href} className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-heading text-sm font-semibold">{action.title}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{action.detail}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    nativeButton={false}
+                    render={<Link href={action.href} />}
+                  >
+                    {action.actionLabel}
+                  </Button>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Next best actions</CardTitle>
-            <CardDescription>Complete these in order to keep the cycle moving.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              {
-                href: "/charter/edit",
-                title: "Draft your goal charter",
-                detail: "Turn priorities into measurable outcomes.",
-              },
-              {
-                href: "/library",
-                title: "Review role expectations",
-                detail: "Choose evidence that matches your level.",
-              },
-              {
-                href: "/docs",
-                title: "Understand the cycle",
-                detail: "See who owns each decision and when.",
-              },
-            ].map((item, index) => (
-              <Button
-                key={item.href}
-                variant="outline"
-                className="h-auto w-full justify-start rounded-xl p-4 text-left"
-                nativeButton={false}
-                render={<Link href={item.href} />}
-              >
-                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {index + 1}
-                </span>
-                <span>
-                  <span className="block font-medium">{item.title}</span>
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    {item.detail}
-                  </span>
-                </span>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <CardTitle>Your charter</CardTitle>
+                <Badge
+                  variant="secondary"
+                  className="uppercase tracking-[0.14em] text-[0.65rem] text-muted-foreground"
+                >
+                  Not started
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Empty className="border bg-muted/30 p-10">
+                <EmptyHeader>
+                  <EmptyTitle>No charter yet</EmptyTitle>
+                  <EmptyDescription>
+                    Draft up to {ACTIVE_CYCLE.maxGoals} goals and {ACTIVE_CYCLE.maxGoals}{" "}
+                    competencies to begin the cycle.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button nativeButton={false} render={<Link href="/charter/edit" />}>
+                    Start my charter
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="grid gap-6">
+          <CycleTimeline />
+          <Card className="bg-accent/40">
+            <CardHeader>
+              <p className="text-[0.65rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Remember
+              </p>
+              <CardTitle className="text-base font-semibold">
+                On a five-point scale, 3 is a good rating.
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-6 text-muted-foreground">
+                It means you reliably delivered what was agreed. A well-set charter usually averages
+                0.7&ndash;0.8 on goal attainment &mdash; a row of perfect 1.0s usually means the
+                goals were set too safe.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      <Alert className="mt-6">
-        <CalendarDays />
-        <AlertTitle>Nothing is overdue</AlertTitle>
-        <AlertDescription>
-          Your first deadline is the goal-charter window. Start early so the coach review can focus
-          on quality rather than formatting.
-        </AlertDescription>
-      </Alert>
     </>
   );
 }
