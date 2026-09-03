@@ -1,17 +1,18 @@
 import { LIBRARY_COMPETENCIES } from "@/data/library";
-import type { CheckInStage, Cycle, CycleStage, Level, LibraryCompetency, Rating } from "@/lib/types";
+import type { CheckInStage, Level, LibraryCompetency, Rating } from "@/lib/types";
 
-export const ACTIVE_CYCLE: Cycle = {
-  id: "C1",
-  name: "Cycle 1 · FY2026",
-  start: "2026-09-01",
-  end: "2027-02-28",
-  goalWindow: { from: "2026-08-21", to: "2026-08-31" },
-  checkins: 6,
-  weights: { okr: 0.6, competency: 0.4 },
-  maxGoals: 5,
-  status: "Active",
-};
+/*
+ * Programme policy, not a cycle.
+ *
+ * A live cycle — its name, dates and quarters — is read from the database; see
+ * `getActiveCycle`. What stays here is the doctrine the schema also enforces:
+ * the 0.6/0.4 split (`cycles_weights_total`), the five-goal ceiling
+ * (`cycles_max_goals_range`), and six monthly check-ins. These are the defaults
+ * the explanatory pages quote, so they must not be read off a fake cycle.
+ */
+export const DEFAULT_WEIGHTS = { okr: 0.6, competency: 0.4 } as const;
+export const DEFAULT_MAX_GOALS = 5;
+export const CHECK_INS_PER_CYCLE = 6;
 
 export const RATINGS: Rating[] = [
   {
@@ -51,14 +52,6 @@ export const SCORE_BANDS = [
   { rating: 1, range: "below 0.45" },
 ] as const;
 
-export const CHECKIN_MONTHS = [
-  "September 2026",
-  "October 2026",
-  "November 2026",
-  "December 2026",
-  "January 2027",
-  "February 2027",
-] as const;
 export const CHARTER_STEPS = [
   { title: "You draft", detail: "goals + competencies" },
   { title: "Coach reviews", detail: "targets, measurability" },
@@ -161,50 +154,3 @@ export const EMPLOYMENT_TYPES = ["Full Time", "Intern"] as const;
 
 export const APPROVER_LABEL = "Leadership";
 export const PROGRAMME_OWNER_LABEL = "Leadership";
-
-function formatDay(iso: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${iso}T00:00:00Z`));
-}
-
-const QUARTER_WEIGHTS = `Goals scored 0.0–1.0 → Score 1, competencies discussed → Score 2, combined ${ACTIVE_CYCLE.weights.okr}/${ACTIVE_CYCLE.weights.competency}.`;
-
-export const CYCLE_STAGES: CycleStage[] = [
-  {
-    id: "goal-setting",
-    title: `Goal setting · ${formatDay(ACTIVE_CYCLE.goalWindow.from)} – ${formatDay(ACTIVE_CYCLE.goalWindow.to)}`,
-    detail:
-      "You draft → coach reviews → Leadership approves. The approved sheet is your charter for the cycle.",
-    state: "open",
-  },
-  {
-    id: "check-ins",
-    title: "Monthly check-ins · 15 minutes",
-    detail:
-      "A two-way conversation. No ratings, no status labels — blockers out, way forward agreed.",
-    state: "open",
-  },
-  {
-    id: "q1",
-    title: "Q1 · Sep–Nov 2026 · scoring by 30 Nov 2026",
-    detail: QUARTER_WEIGHTS,
-    state: "later",
-  },
-  {
-    id: "q2",
-    title: `Q2 · Dec–Feb 2027 · scoring by ${formatDay(ACTIVE_CYCLE.end)}`,
-    detail: `${QUARTER_WEIGHTS} Half-yearly review and feedback session happens here.`,
-    state: "later",
-  },
-  {
-    id: "close",
-    title: "Cycle close",
-    detail:
-      "Half-yearly score = the average of the two quarters. Annual = the average of the halves.",
-    state: "later",
-  },
-];

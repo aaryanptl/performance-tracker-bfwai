@@ -1,48 +1,81 @@
-import { CalendarCheck2, Goal, Sparkles, Trophy } from "lucide-react";
-import { notFound } from "next/navigation";
+import { BookOpen, CalendarCheck2, Goal, Sparkles, Trophy } from "lucide-react";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 
 import { MetricCard } from "@/app/components/metric-card";
 import { PageHeader } from "@/app/components/page-header";
-import { PersonScopeGate } from "@/app/components/role-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getCoach, getPerson } from "@/data/people";
+import { Button } from "@/components/ui/button";
+import {
+  CHARTER_STATUS_LABELS,
+  halfYearScore,
+  IMPACT_STATUS_LABELS,
+} from "@/lib/data/performance-types";
+import { getPersonRecord } from "@/lib/data/person-record";
+import { getViewer } from "@/lib/data/viewer";
 
 export default async function PersonRecordPage({ params }: { params: Promise<{ id: string }> }) {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+
   const { id } = await params;
-  const person = getPerson(id);
-  if (!person) notFound();
-  const coach = getCoach(person);
+  const participantId = Number(id);
+  if (!Number.isInteger(participantId) || participantId <= 0) notFound();
+
+  // Scope is row-level security: a record outside it does not come back.
+  const record = await getPersonRecord(viewer.supabase, participantId);
+  if (!record) notFound();
+
+  const { participant, charter, checkIns, impactStatements, reviews } = record;
+  const recorded = checkIns.filter((checkIn) => checkIn.notes !== null).length;
+  const shared = impactStatements.filter((statement) => statement.status !== "draft").length;
+  const half = halfYearScore(reviews);
+  const latestImpact = impactStatements.at(-1);
+
   return (
-    <PersonScopeGate personId={person.id}>
+    <>
       <PageHeader
-        eyebrow={`${person.unit} · Level ${person.level}`}
-        title={`${person.name}'s record`}
-        description={`${person.title}. Coach: ${coach?.name ?? "Leadership"}.`}
+        eyebrow={`${participant.unitName} · Level ${participant.jobLevel}`}
+        title={`${participant.personName}'s record`}
+        description={`${participant.title}. Coach: ${participant.coachName ?? "Leadership"}.`}
+        action={
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`/book/${participant.id}`} target="_blank" />}
+          >
+            <BookOpen />
+            Record book
+          </Button>
+        }
       />
-      <Alert className="mb-6">
-        <Goal />
-        <AlertTitle>Record created, cycle activity pending</AlertTitle>
-        <AlertDescription>
-          The roster profile is complete. Charter, check-in, impact, and score sections will
-          populate as the cycle progresses.
-        </AlertDescription>
-      </Alert>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Charter" value="Pending" detail="No approved goals yet." icon={Goal} />
+        <MetricCard
+          label="Charter"
+          value={charter ? CHARTER_STATUS_LABELS[charter.status] : "Not started"}
+          detail={charter ? `${charter.goals.length} goals` : "No charter drafted yet."}
+          icon={Goal}
+        />
         <MetricCard
           label="Check-ins"
-          value="0 / 6"
-          detail="No monthly records yet."
+          value={`${recorded} / 6`}
+          detail={recorded === 0 ? "No monthly records yet." : "Recorded by the coach."}
           icon={CalendarCheck2}
         />
         <MetricCard
           label="Impact"
-          value="0 / 2"
-          detail="No quarterly evidence yet."
+          value={`${shared} / ${Math.max(impactStatements.length, 2)}`}
+          detail={
+            latestImpact ? IMPACT_STATUS_LABELS[latestImpact.status] : "No quarterly evidence yet."
+          }
           icon={Sparkles}
         />
-        <MetricCard label="Score" value="Pending" detail="No released review yet." icon={Trophy} />
+        <MetricCard
+          label="Score"
+          value={half === null ? "Pending" : half.toFixed(2)}
+          detail={half === null ? "No released review yet." : "Half-yearly average."}
+          icon={Trophy}
+        />
       </div>
-    </PersonScopeGate>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { LockKeyhole, LogIn, Mountain } from "lucide-react";
+import { LockKeyhole, LogIn } from "lucide-react";
 import { useActionState } from "react";
 import { signIn } from "@/app/signin/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,16 +13,7 @@ export function SignInPanel({ initialError = null }: { initialError?: string | n
   const [state, formAction, pending] = useActionState(signIn, { error: initialError });
 
   return (
-    <div className="mx-auto w-full max-w-md">
-      <div className="mb-8 flex items-center justify-center gap-3 text-primary-foreground">
-        <span className="grid size-11 place-items-center rounded-2xl bg-primary-foreground/12">
-          <Mountain />
-        </span>
-        <div>
-          <p className="font-heading text-xl font-semibold">Ascend</p>
-          <p className="text-sm text-primary-foreground/70">Build Fast with AI</p>
-        </div>
-      </div>
+    <div>
       <Card className="shadow-2xl shadow-black/20">
         <CardHeader className="border-b">
           <CardTitle className="flex items-center gap-2 text-xl">
@@ -66,7 +57,7 @@ export function SignInPanel({ initialError = null }: { initialError?: string | n
           </form>
         </CardContent>
       </Card>
-      <p className="mt-5 text-center text-xs text-primary-foreground/60">
+      <p className="mt-5 text-center text-xs text-sidebar-foreground/60">
         Password recovery email is unavailable. Contact an administrator for a manual reset.
       </p>
     </div>

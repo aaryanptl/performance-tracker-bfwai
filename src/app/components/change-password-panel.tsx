@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Mountain } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useActionState } from "react";
 
 import { changePassword } from "@/app/change-password/actions";
@@ -14,16 +14,7 @@ export function ChangePasswordPanel() {
   const [state, formAction, pending] = useActionState(changePassword, { error: null });
 
   return (
-    <div className="mx-auto w-full max-w-md">
-      <div className="mb-8 flex items-center justify-center gap-3 text-primary-foreground">
-        <span className="grid size-11 place-items-center rounded-2xl bg-primary-foreground/12">
-          <Mountain />
-        </span>
-        <div>
-          <p className="font-heading text-xl font-semibold">Ascend</p>
-          <p className="text-sm text-primary-foreground/70">Build Fast with AI</p>
-        </div>
-      </div>
+    <div>
       <Card className="shadow-2xl shadow-black/20">
         <CardHeader className="border-b">
           <CardTitle className="flex items-center gap-2 text-xl">

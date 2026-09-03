@@ -1,9 +1,13 @@
+import { redirect } from "next/navigation";
+
 import { PageHeader } from "@/app/components/page-header";
+import { ParticipantTable } from "@/app/components/participant-table";
 import { RatingTraps } from "@/app/components/rating-traps";
-import { ScopedPeopleTable } from "@/app/components/scoped-people-table";
 import { ScoringGuideDialog } from "@/app/components/scoring-guide-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ACTIVE_CYCLE, SCORE_BANDS } from "@/data/performance";
+import { SCORE_BANDS } from "@/data/performance";
+import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { getViewer } from "@/lib/data/viewer";
 
 const STEPS = [
   "Read Part 1 — the Impact Statement, alongside what the person recorded as their actuals.",
@@ -13,7 +17,16 @@ const STEPS = [
   "Write the verified impact summary and the development needs, choose a recommendation, and sign. The quarterly score is computed, not typed.",
 ];
 
-export default function ScoringPage() {
+export default async function ScoringPage() {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+
+  const cycle = await getActiveCycle(viewer.supabase);
+  const participants = cycle ? await getVisibleParticipants(viewer.supabase, cycle.id) : [];
+  const scoreable = viewer.isAdmin
+    ? participants
+    : participants.filter((participant) => participant.coachId === viewer.personId);
+
   return (
     <>
       <PageHeader
@@ -41,16 +54,26 @@ export default function ScoringPage() {
             </p>
             <p className="text-sm leading-6">
               <span className="font-medium">
-                Quarterly score = (Score 1 × {ACTIVE_CYCLE.weights.okr}) + (Score 2 ×{" "}
-                {ACTIVE_CYCLE.weights.competency})
+                Quarterly score = (Score 1 × {cycle?.okrWeight ?? 0.6}) + (Score 2 ×{" "}
+                {cycle?.competencyWeight ?? 0.4})
               </span>
-              <span className="text-muted-foreground">, calibrated across all coaches before release.</span>
+              <span className="text-muted-foreground">
+                , calibrated across all coaches before release.
+              </span>
             </p>
           </CardContent>
         </Card>
         <RatingTraps />
       </div>
-      <ScopedPeopleTable actionBase="/coaching/reviews" />
+      <ParticipantTable
+        participants={scoreable}
+        action="review"
+        emptyMessage={
+          cycle
+            ? "No one in your scope is ready to be scored yet."
+            : "No cycle is open yet. An administrator opens the cycle and enrols the roster."
+        }
+      />
     </>
   );
 }

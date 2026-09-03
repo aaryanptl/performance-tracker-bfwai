@@ -1,8 +1,23 @@
+import { CalendarClock } from "lucide-react";
+import { redirect } from "next/navigation";
+
 import { PageHeader } from "@/app/components/page-header";
 import { ImpactForm } from "@/app/components/performance-forms";
+import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Card, CardContent } from "@/components/ui/card";
+import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { getImpactStatements } from "@/lib/data/records";
+import { getViewer } from "@/lib/data/viewer";
 
-export default function ImpactPage() {
+export default async function ImpactPage() {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+
+  const cycle = await getActiveCycle(viewer.supabase);
+  const participant = cycle
+    ? await getOwnParticipant(viewer.supabase, cycle.id, viewer.personId)
+    : null;
+
   return (
     <>
       <PageHeader
@@ -17,7 +32,23 @@ export default function ImpactPage() {
           record cannot move after the fact.
         </CardContent>
       </Card>
-      <ImpactForm />
+
+      {!cycle || !participant ? (
+        <WorkflowEmpty
+          icon={CalendarClock}
+          title={cycle ? "You are not enrolled in this cycle" : "No cycle is open yet"}
+          description={
+            cycle
+              ? "Ask an administrator to add you to the current cycle from Cycles & settings."
+              : "An administrator opens the cycle and enrols the roster. Your impact statement becomes available then."
+          }
+        />
+      ) : (
+        <ImpactForm
+          quarters={cycle.quarters}
+          statements={await getImpactStatements(viewer.supabase, participant.id)}
+        />
+      )}
     </>
   );
 }

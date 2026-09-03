@@ -1,9 +1,83 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ACTIVE_CYCLE, CYCLE_STAGES } from "@/data/performance";
+import type { CycleSummary } from "@/lib/data/performance-types";
 import { cn } from "@/lib/utils";
 
-export function CycleTimeline({ className }: { className?: string }) {
+const DAY = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatDay(iso: string) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? iso : DAY.format(date);
+}
+
+interface Stage {
+  id: string;
+  title: string;
+  detail: string;
+  state: "open" | "later";
+}
+
+/**
+ * The stages of the cycle, derived from the cycle itself.
+ *
+ * `state` is decided by today's date rather than being written down, so the
+ * timeline keeps telling the truth as the cycle runs: a stage is "open" once it
+ * has started and stays open until the next one begins.
+ */
+function stagesFor(cycle: CycleSummary, today: string): Stage[] {
+  const weights = `Goals scored 0.0–1.0 → Score 1, competencies discussed → Score 2, combined ${cycle.okrWeight}/${cycle.competencyWeight}.`;
+
+  return [
+    {
+      id: "goal-setting",
+      title: `Goal setting · ${formatDay(cycle.goalWindowStart)} – ${formatDay(cycle.goalWindowEnd)}`,
+      detail:
+        "You draft → coach reviews → Leadership approves. The approved sheet is your charter for the cycle.",
+      state: today <= cycle.goalWindowEnd ? "open" : "later",
+    },
+    {
+      id: "check-ins",
+      title: "Monthly check-ins · 15 minutes",
+      detail:
+        "A two-way conversation. No ratings, no status labels — blockers out, way forward agreed.",
+      state: today >= cycle.startDate && today <= cycle.endDate ? "open" : "later",
+    },
+    ...cycle.quarters.map((quarter) => ({
+      id: `quarter-${quarter.id}`,
+      title: `${quarter.name} · scoring by ${formatDay(quarter.endDate)}`,
+      detail:
+        quarter.sequence === cycle.quarters.length
+          ? `${weights} Half-yearly review and feedback session happens here.`
+          : weights,
+      state: (today >= quarter.startDate && today <= quarter.endDate ? "open" : "later") as
+        | "open"
+        | "later",
+    })),
+    {
+      id: "close",
+      title: "Cycle close",
+      detail:
+        "Half-yearly score = the average of the two quarters. Annual = the average of the halves.",
+      state: today > cycle.endDate ? "open" : "later",
+    },
+  ];
+}
+
+export function CycleTimeline({
+  cycle,
+  className,
+}: {
+  cycle: CycleSummary | null;
+  className?: string;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const stages = cycle ? stagesFor(cycle, today) : [];
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -13,43 +87,50 @@ export function CycleTimeline({ className }: { className?: string }) {
             variant="secondary"
             className="uppercase tracking-[0.14em] text-[0.65rem] text-muted-foreground"
           >
-            {ACTIVE_CYCLE.name}
+            {cycle?.name ?? "No cycle open"}
           </Badge>
         </div>
       </CardHeader>
       <CardContent>
-        <ol>
-          {CYCLE_STAGES.map((stage, index) => {
-            const isLast = index === CYCLE_STAGES.length - 1;
-            return (
-              <li key={stage.id} className="grid grid-cols-[auto_1fr] gap-x-4">
-                <div className="flex flex-col items-center">
-                  <span
-                    className={cn(
-                      "mt-1.5 shrink-0 rounded-full border-2 bg-card",
-                      stage.state === "open"
-                        ? "size-3.5 border-primary"
-                        : "size-2.5 border-muted-foreground/35",
-                    )}
-                  />
-                  {isLast ? null : (
+        {cycle === null ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            An administrator opens the cycle and enrols the roster. The timeline appears here as
+            soon as that happens.
+          </p>
+        ) : (
+          <ol>
+            {stages.map((stage, index) => {
+              const isLast = index === stages.length - 1;
+              return (
+                <li key={stage.id} className="grid grid-cols-[auto_1fr] gap-x-4">
+                  <div className="flex flex-col items-center">
                     <span
-                      aria-hidden
                       className={cn(
-                        "mt-1 w-px flex-1",
-                        stage.state === "open" ? "bg-primary/40" : "bg-border",
+                        "mt-1.5 shrink-0 rounded-full border-2 bg-card",
+                        stage.state === "open"
+                          ? "size-3.5 border-primary"
+                          : "size-2.5 border-muted-foreground/35",
                       )}
                     />
-                  )}
-                </div>
-                <div className={cn(isLast ? "pb-0" : "pb-6")}>
-                  <p className="font-heading text-sm font-semibold leading-6">{stage.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{stage.detail}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                    {isLast ? null : (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "mt-1 w-px flex-1",
+                          stage.state === "open" ? "bg-primary/40" : "bg-border",
+                        )}
+                      />
+                    )}
+                  </div>
+                  <div className={cn(isLast ? "pb-0" : "pb-6")}>
+                    <p className="font-heading text-sm font-semibold leading-6">{stage.title}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{stage.detail}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
       </CardContent>
     </Card>
   );

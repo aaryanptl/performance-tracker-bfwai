@@ -10,21 +10,9 @@ export interface Person {
   title: string;
   unit: string;
   level: number;
-  employment: "Full Time" | "Intern";
+  employment: "Full Time" | "Intern" | "Contractor";
   coachId: string | null;
   leaderId: string | null;
-}
-
-export interface Cycle {
-  id: string;
-  name: string;
-  start: string;
-  end: string;
-  goalWindow: { from: string; to: string };
-  checkins: number;
-  weights: { okr: number; competency: number };
-  maxGoals: number;
-  status: "Active" | "Draft" | "Complete";
 }
 
 export interface NavigationItem {
@@ -66,13 +54,6 @@ export interface Rating {
   value: number;
   label: string;
   description: string;
-}
-
-export interface CycleStage {
-  id: string;
-  title: string;
-  detail: string;
-  state: "open" | "later";
 }
 
 export interface CheckInStage {

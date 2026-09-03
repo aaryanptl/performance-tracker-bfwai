@@ -1,4 +1,5 @@
 import { BriefcaseBusiness, CalendarCheck2, Goal, ShieldCheck } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { MetricCard } from "@/app/components/metric-card";
 import { PageHeader } from "@/app/components/page-header";
@@ -13,59 +14,122 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getCoachees, PEOPLE } from "@/data/people";
-import { ACTIVE_CYCLE } from "@/data/performance";
+import { getVisibleRecords } from "@/lib/data/person-record";
+import { getViewer } from "@/lib/data/viewer";
 
-export default function AdminDashboardPage() {
-  const coaches = PEOPLE.filter((person) => person.role === "coach" || person.role === "admin");
-  const scored = PEOPLE.filter((person) => person.role !== "admin");
+const CHECK_INS_PER_PERSON = 6;
+
+function percent(part: number, whole: number) {
+  if (whole === 0) return 0;
+  return Math.round((part / whole) * 100);
+}
+
+export default async function AdminDashboardPage() {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+
+  const records = await getVisibleRecords(viewer.supabase);
+  const cycle = records[0]?.cycle ?? null;
+
+  const total = records.length;
+  const drafted = records.filter((record) => record.charter !== null).length;
+  const approved = records.filter((record) => record.charter?.status === "approved_locked").length;
+  const coached = records.filter((record) => record.participant.coachId !== null).length;
+  const checkInsRecorded = records.reduce(
+    (sum, record) => sum + record.checkIns.filter((checkIn) => checkIn.notes !== null).length,
+    0,
+  );
+  const withFirstCheckIn = records.filter((record) =>
+    record.checkIns.some((checkIn) => checkIn.notes !== null),
+  ).length;
+
+  const releasedScores = records.flatMap((record) =>
+    record.reviews.filter((review) => review.releasedAt !== null && review.quarterlyScore !== null),
+  );
+
+  // Coach load is derived from who is actually named on each enrolment.
+  const coaches = new Map<
+    number,
+    { name: string; coachees: number; checkIns: number; charters: number; scores: number }
+  >();
+  for (const record of records) {
+    const coachId = record.participant.coachId;
+    if (coachId === null) continue;
+    const entry = coaches.get(coachId) ?? {
+      name: record.participant.coachName ?? "Unknown",
+      coachees: 0,
+      checkIns: 0,
+      charters: 0,
+      scores: 0,
+    };
+    entry.coachees += 1;
+    entry.checkIns += record.checkIns.filter((checkIn) => checkIn.notes !== null).length;
+    entry.charters += record.charter?.status === "approved_locked" ? 1 : 0;
+    entry.scores += record.reviews.filter((review) => review.okrRating !== null).length;
+    coaches.set(coachId, entry);
+  }
+
+  const distribution = [5, 4, 3, 2, 1].map((band) => ({
+    band,
+    count: releasedScores.filter((review) => Math.round(review.quarterlyScore ?? 0) === band)
+      .length,
+  }));
 
   return (
     <>
       <PageHeader
-        eyebrow={ACTIVE_CYCLE.name}
+        eyebrow={cycle?.name ?? "No cycle open"}
         title="Programme dashboard"
-        description={`${ACTIVE_CYCLE.start} – ${ACTIVE_CYCLE.end} · ${PEOPLE.length} people, ${coaches.length} coaches. Whether the rhythm is actually being kept: completion, score distribution, and coach load.`}
+        description={
+          cycle
+            ? `${cycle.startDate} – ${cycle.endDate} · ${total} people, ${coaches.size} coaches. Whether the rhythm is actually being kept: completion, score distribution, and coach load.`
+            : "No cycle is open yet. Open one from Cycles & settings to enrol the roster."
+        }
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="People in programme"
-          value={String(PEOPLE.length)}
-          detail={`${coaches.length} coaches · ${scored.length} scored people`}
+          value={String(total)}
+          detail={`${coaches.size} coaches · ${coached} with a named coach`}
           icon={BriefcaseBusiness}
         />
         <MetricCard
           label="Charters approved and locked"
-          value={`0 / ${scored.length}`}
+          value={`${approved} / ${total}`}
           detail="Charters cannot be scored until they are approved."
           icon={Goal}
-          badge="Attention"
+          badge={approved < total ? "Attention" : undefined}
         />
         <MetricCard
           label="Check-in completion"
-          value={`0 / ${scored.length * ACTIVE_CYCLE.checkins}`}
-          detail={`${ACTIVE_CYCLE.checkins} per person across the cycle.`}
+          value={`${checkInsRecorded} / ${total * CHECK_INS_PER_PERSON}`}
+          detail={`${CHECK_INS_PER_PERSON} per person across the cycle.`}
           icon={CalendarCheck2}
         />
         <MetricCard
           label="Coaching coverage"
-          value="100%"
-          detail="Every scored person has a named coach."
+          value={`${percent(coached, total)}%`}
+          detail={
+            coached === total
+              ? "Every enrolled person has a named coach."
+              : `${total - coached} without a coach.`
+          }
           icon={ShieldCheck}
         />
       </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Readiness by stage</CardTitle>
-            <CardDescription>Progress through the cycle's required workflow.</CardDescription>
+            <CardDescription>Progress through the cycle&rsquo;s required workflow.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {[
-              { label: "Charters drafted", value: 0 },
-              { label: "Coach approved", value: 0 },
-              { label: "First check-in complete", value: 0 },
-              { label: "Coaching line assigned", value: 100 },
+              { label: "Charters drafted", value: percent(drafted, total) },
+              { label: "Coach approved", value: percent(approved, total) },
+              { label: "First check-in complete", value: percent(withFirstCheckIn, total) },
+              { label: "Coaching line assigned", value: percent(coached, total) },
             ].map((item) => (
               <Progress key={item.label} value={item.value}>
                 <ProgressLabel>{item.label}</ProgressLabel>
@@ -76,6 +140,7 @@ export default function AdminDashboardPage() {
             ))}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Score distribution</CardTitle>
@@ -84,18 +149,30 @@ export default function AdminDashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <Alert>
-              <ShieldCheck />
-              <AlertTitle>Nothing released yet</AlertTitle>
-              <AlertDescription>
-                Watch for central tendency — everyone landing on 3 — and for a coach whose ratings
-                sit consistently above or below the group. Both are calibration conversations, not
-                data problems.
-              </AlertDescription>
-            </Alert>
+            {releasedScores.length === 0 ? (
+              <Alert>
+                <ShieldCheck />
+                <AlertTitle>Nothing released yet</AlertTitle>
+                <AlertDescription>
+                  Watch for central tendency — everyone landing on 3 — and for a coach whose ratings
+                  sit consistently above or below the group. Both are calibration conversations, not
+                  data problems.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              distribution.map((entry) => (
+                <Progress key={entry.band} value={percent(entry.count, releasedScores.length)}>
+                  <ProgressLabel>Score {entry.band}</ProgressLabel>
+                  <span className="ml-auto text-sm tabular-nums text-muted-foreground">
+                    {entry.count}
+                  </span>
+                </Progress>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
+
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Coach load and completion</CardTitle>
@@ -105,38 +182,42 @@ export default function AdminDashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Coach</TableHead>
-                <TableHead className="text-right">Coachees</TableHead>
-                <TableHead className="text-right">Check-ins</TableHead>
-                <TableHead className="text-right">Charters signed</TableHead>
-                <TableHead className="text-right">Scores signed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {coaches.map((coach) => {
-                const coachees = getCoachees(coach.id).length;
-                return (
-                  <TableRow key={coach.id}>
-                    <TableCell>
-                      {coach.name}
-                      {coach.role === "admin" ? (
-                        <span className="ml-2 text-xs text-muted-foreground">admin</span>
-                      ) : null}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Coach</TableHead>
+                  <TableHead className="text-right">Coachees</TableHead>
+                  <TableHead className="text-right">Check-ins</TableHead>
+                  <TableHead className="text-right">Charters signed</TableHead>
+                  <TableHead className="text-right">Scores signed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {coaches.size === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No coaching lines are assigned in this cycle yet.
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{coachees}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      0 / {coachees * ACTIVE_CYCLE.checkins}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">0 / {coachees}</TableCell>
-                    <TableCell className="text-right tabular-nums">0</TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                ) : (
+                  [...coaches.entries()].map(([coachId, entry]) => (
+                    <TableRow key={coachId}>
+                      <TableCell>{entry.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{entry.coachees}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {entry.checkIns} / {entry.coachees * CHECK_INS_PER_PERSON}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {entry.charters} / {entry.coachees}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{entry.scores}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </>

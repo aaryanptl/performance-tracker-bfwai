@@ -20,12 +20,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ACTIVE_CYCLE, RATINGS, SCORE_BANDS } from "@/data/performance";
+import { DEFAULT_WEIGHTS, RATINGS, SCORE_BANDS } from "@/data/performance";
 import { cn } from "@/lib/utils";
 
 /** Info button + dialog explaining how a quarterly score is built and what each rating means. */
 export function ScoringGuideDialog() {
-  const { okr, competency } = ACTIVE_CYCLE.weights;
+  const { okr, competency } = DEFAULT_WEIGHTS;
 
   return (
     <Dialog>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/app/components/app-shell";
 import { SessionProvider } from "@/hooks/use-session";
 import { getPersonForAuthUser } from "@/lib/auth/profile";
+import { getActiveCycle } from "@/lib/data/cycle";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
@@ -20,9 +21,11 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     redirect("/setup-required");
   }
 
+  const cycle = await getActiveCycle(supabase);
+
   return (
     <SessionProvider person={person}>
-      <AppShell>{children}</AppShell>
+      <AppShell cycle={cycle}>{children}</AppShell>
     </SessionProvider>
   );
 }

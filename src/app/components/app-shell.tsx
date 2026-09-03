@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeft, ChevronsUpDown, KeyRound, LogOut, Mountain } from "lucide-react";
 import { Menu } from "@base-ui/react/menu";
+import { ArrowLeft, ChevronsUpDown, KeyRound, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BrandLogo } from "@/app/components/brand-logo";
 import { signOut } from "@/app/signin/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,8 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NAVIGATION, ROUTE_TITLES } from "@/data/navigation";
 import { initials } from "@/data/people";
-import { ACTIVE_CYCLE } from "@/data/performance";
 import { useSession } from "@/hooks/use-session";
+import type { CycleSummary } from "@/lib/data/performance-types";
 
 function titleForPath(pathname: string) {
   if (ROUTE_TITLES[pathname]) return ROUTE_TITLES[pathname];
@@ -85,12 +86,10 @@ function WorkspaceSidebar() {
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader className="p-3">
         <Link href="/" className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
-            <Mountain className="size-5" />
-          </span>
+          <BrandLogo on="dark" className="h-9 shrink-0 group-data-[collapsible=icon]:h-7" />
           <span className="grid leading-tight group-data-[collapsible=icon]:hidden">
             <span className="font-heading text-sm font-semibold">Ascend</span>
-            <span className="text-xs text-muted-foreground">Performance system</span>
+            <span className="text-xs text-sidebar-foreground/60">Performance system</span>
           </span>
         </Link>
       </SidebarHeader>
@@ -137,9 +136,7 @@ function WorkspaceSidebar() {
           <SidebarMenuItem>
             <Menu.Root>
               <Menu.Trigger
-                render={
-                  <SidebarMenuButton size="lg" tooltip={`${person.name} · ${person.role}`} />
-                }
+                render={<SidebarMenuButton size="lg" tooltip={`${person.name} · ${person.role}`} />}
               >
                 <span className="grid size-8 place-items-center rounded-full bg-primary/12 font-semibold text-primary">
                   {initials(person.name)}
@@ -190,7 +187,7 @@ function WorkspaceSidebar() {
   );
 }
 
-function WorkspaceHeader() {
+function WorkspaceHeader({ cycle }: { cycle: CycleSummary | null }) {
   const pathname = usePathname();
   const route = titleForPath(pathname);
   const backHref = backHrefForPath(pathname);
@@ -219,26 +216,34 @@ function WorkspaceHeader() {
         </p>
       </div>
       <Badge variant="outline" className="hidden sm:inline-flex">
-        {ACTIVE_CYCLE.status}
+        {cycle ? cycle.status.replace(/_/g, " ") : "no cycle"}
       </Badge>
-      <NativeSelect
-        aria-label="Active cycle"
-        defaultValue={ACTIVE_CYCLE.id}
-        className="hidden w-48 md:block"
-      >
-        <NativeSelectOption value={ACTIVE_CYCLE.id}>{ACTIVE_CYCLE.name}</NativeSelectOption>
-      </NativeSelect>
+      {cycle ? (
+        <NativeSelect
+          aria-label="Active cycle"
+          defaultValue={String(cycle.id)}
+          className="hidden w-48 md:block"
+        >
+          <NativeSelectOption value={String(cycle.id)}>{cycle.name}</NativeSelectOption>
+        </NativeSelect>
+      ) : null}
     </header>
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  cycle,
+}: {
+  children: React.ReactNode;
+  cycle: CycleSummary | null;
+}) {
   return (
     <TooltipProvider>
       <SidebarProvider>
         <WorkspaceSidebar />
         <SidebarInset>
-          <WorkspaceHeader />
+          <WorkspaceHeader cycle={cycle} />
           <div className="mx-auto w-full max-w-[1440px] flex-1 p-4 sm:p-6 lg:p-8">{children}</div>
         </SidebarInset>
       </SidebarProvider>

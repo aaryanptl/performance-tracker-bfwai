@@ -1,40 +1,36 @@
 import { ShieldCheck } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { ExportActions } from "@/app/components/export-actions";
 import { PageHeader } from "@/app/components/page-header";
-import { ScopedPeopleTable } from "@/app/components/scoped-people-table";
+import { ParticipantTable } from "@/app/components/participant-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PROGRAMME_OWNER_LABEL } from "@/data/performance";
+import { buildExports } from "@/lib/data/exports";
+import { getVisibleRecords } from "@/lib/data/person-record";
+import { getViewer } from "@/lib/data/viewer";
 
 const CSV_EXPORTS = [
   [
     "Goal charters",
-    "One row per goal: objective, key result, baseline, target, data source, actuals and each quarter's score. Competency commitments follow as their own rows.",
+    "One row per goal: objective, key result, baseline, target and the named data source, for every person in your scope.",
   ],
   [
     "Monthly check-ins",
-    "One row per check-in: all four stages, both signatures, and the way forward agreed.",
+    "One row per check-in: progress, blockers, the way forward agreed, and whether the person has signed it.",
   ],
   [
     "Impact statements",
-    "One row per person per quarter, exactly as written by the team member, with the date shared.",
+    "One row per entry, exactly as written by the team member, with the quarter and the sharing status.",
   ],
   [
     "Quarterly scores",
-    "Goal-score average, Score 1, Score 2, the quarterly score, impact summary, development needs, recommendation and all three sign-offs.",
-  ],
-  [
-    "Score summary",
-    "One row per person: every quarter's Score 1, Score 2 and quarterly score, the half-yearly score, and the standing recommendation.",
-  ],
-  [
-    "Conversation transcript",
-    "Every entry added by a coach or a team member to any record, with author, role and timestamp.",
+    "Goal-attainment average, Score 1, Score 2, the computed quarterly score, the recommendation and the release date.",
   ],
   [
     "People and coaching map",
-    "One row per person: position, unit, year-at-level, employment type, team leader and coach.",
+    "One row per person: name, email, title, unit, level, coach, charter status and the half-yearly score.",
   ],
 ] as const;
 
@@ -49,14 +45,20 @@ const DOCUMENTS = [
   ],
 ] as const;
 
-export default function RecordsPage() {
+export default async function RecordsPage() {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+
+  const records = await getVisibleRecords(viewer.supabase);
+  const files = buildExports(records);
+
   return (
     <>
       <PageHeader
         eyebrow="Scope-aware exports"
         title="Records & downloads"
-        description="Everything written in Ascend is downloadable: the charters, every monthly check-in, every Impact Statement, every scoring conversation, and the full transcript of what the coach and the team member each put on the record."
-        action={<ExportActions />}
+        description="Everything written in Ascend is downloadable: the charters, every monthly check-in, every Impact Statement and every scoring conversation — as CSV for analysis, or as a record book to read and print."
+        action={<ExportActions exports={files} canDownloadAll={viewer.isAdmin} />}
       />
       <Alert className="mb-6">
         <ShieldCheck />
@@ -99,7 +101,11 @@ export default function RecordsPage() {
           </CardContent>
         </Card>
       </div>
-      <ScopedPeopleTable actionBase="/records" />
+      <ParticipantTable
+        participants={records.map((record) => record.participant)}
+        action="record"
+        emptyMessage="No records are available yet. A cycle must be open and the roster enrolled."
+      />
     </>
   );
 }

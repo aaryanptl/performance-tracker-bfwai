@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/table";
 import { LIBRARY_COMPETENCIES, LIBRARY_OKRS } from "@/data/library";
 import {
-  ACTIVE_CYCLE,
   APPROVER_LABEL,
   CHECKIN_STAGES,
+  DEFAULT_MAX_GOALS,
+  DEFAULT_WEIGHTS,
   PROGRAMME_OWNER_LABEL,
   RATINGS,
   SCORE_BANDS,
@@ -34,13 +35,13 @@ const SECTIONS = [
   ["s6", "Step 6 · Half-yearly and annual scores"],
   ["screens", "Every screen, and what it does"],
   ["access", "Who can see what"],
-  ["records", "Records, transcripts and downloads"],
+  ["records", "Records and downloads"],
   ["setup", "Setting the system up"],
   ["gov", "Fairness, privacy and governance"],
   ["faq", "Questions people ask"],
 ] as const;
 
-const { okr, competency } = ACTIVE_CYCLE.weights;
+const { okr, competency } = DEFAULT_WEIGHTS;
 const BAND_LADDER = SCORE_BANDS.map((band) => `${band.range} → ${band.rating}`).join(" · ");
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -118,10 +119,7 @@ const SCREENS = [
     "My Goal Charter",
     "Draft and send the charter; after approval, record what you actually achieved against each goal, each quarter. Printable.",
   ],
-  [
-    "My Check-ins",
-    "Every monthly record, with the summary and way forward, and your signature.",
-  ],
+  ["My Check-ins", "Every monthly record, with the summary and way forward, and your signature."],
   ["Impact Statement", "Write and share your own account of your impact, one per quarter."],
   [
     "My Scores",
@@ -142,7 +140,7 @@ const SCREENS = [
     "Cycles & Settings",
     "Cycle dates, goal window, number of check-ins, maximum goals, the two weights, quarter labels and deadlines, and naming.",
   ],
-  ["Records & Downloads", "Every export, per record type or per person, plus the activity log."],
+  ["Records & Downloads", "Every export, per record type or per person, plus the record book."],
   [
     "Goal & Competency Library",
     `${LIBRARY_OKRS.length} example key results and ${LIBRARY_COMPETENCIES.length} competencies with level descriptions, browsable by unit.`,
@@ -152,13 +150,13 @@ const SCREENS = [
 const ACCESS = [
   [
     "admin",
-    "Every person's charter, check-ins, impact statements, scores and transcript. The programme dashboard, the people and coaching map, the organisation-wide record book, the full JSON backup and the activity log.",
+    "Every person's charter, check-ins, impact statements and scores. The programme dashboard, the people and coaching map, the organisation-wide record book and the full JSON backup.",
     "—",
   ],
   [
     "coach",
-    "Their own record, and the full record of each person they coach: charters, check-ins, impact statements, scores and transcripts. CSV exports and a team record book, both limited to that same set of people.",
-    "Another coach's coachees. The programme dashboard, people admin, cycle settings, the organisation-wide record book, the JSON backup and the activity log.",
+    "Their own record, and the full record of each person they coach: charters, check-ins, impact statements and scores. CSV exports and a team record book, both limited to that same set of people.",
+    "Another coach's coachees. The programme dashboard, people admin, cycle settings, the organisation-wide record book and the JSON backup.",
   ],
   [
     "member",
@@ -245,7 +243,7 @@ export default function DocsPage() {
                     <TableCell className="tabular-nums">{okr * 100}%</TableCell>
                     <TableCell className="whitespace-normal text-muted-foreground">
                       What you delivered against the approved goals in your Goal Charter (maximum{" "}
-                      {ACTIVE_CYCLE.maxGoals}).
+                      {DEFAULT_MAX_GOALS}).
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -270,7 +268,10 @@ export default function DocsPage() {
                 </TableHeader>
                 <TableBody>
                   {RATINGS.map((rating) => (
-                    <TableRow key={rating.value} className={rating.value === 3 ? "bg-accent/40" : ""}>
+                    <TableRow
+                      key={rating.value}
+                      className={rating.value === 3 ? "bg-accent/40" : ""}
+                    >
                       <TableCell className="font-semibold tabular-nums">{rating.value}</TableCell>
                       <TableCell className="font-medium">{rating.label}</TableCell>
                       <TableCell className="whitespace-normal text-muted-foreground">
@@ -359,19 +360,18 @@ export default function DocsPage() {
               ordered
               items={[
                 <>
-                  <strong>The team member drafts.</strong> Up to {ACTIVE_CYCLE.maxGoals} goals. Each
-                  one can be picked from the library — {LIBRARY_OKRS.length} example key results
-                  across the units — or written from scratch. Every goal needs a measurable key
-                  result, a baseline, a target, and a named data source.
+                  <strong>The team member drafts.</strong> Up to {DEFAULT_MAX_GOALS} goals. Each one
+                  can be picked from the library — {LIBRARY_OKRS.length} example key results across
+                  the units — or written from scratch. Every goal needs a measurable key result, a
+                  baseline, a target, and a named data source.
                 </>,
                 <>
                   <strong>Competencies are chosen.</strong> Three are fixed for everyone:
                   Communication, Discipline &amp; Documentation, and Collaboration. Two more are
                   chosen with the coach from the library of {LIBRARY_COMPETENCIES.length}. Each of
-                  the five carries a one-line commitment — what the person will actually{" "}
-                  <em>do</em> under it. That commitment is what the quarterly discussion is judged
-                  against, so "Communication" becomes "weekly written project update to all
-                  stakeholders".
+                  the five carries a one-line commitment — what the person will actually <em>do</em>{" "}
+                  under it. That commitment is what the quarterly discussion is judged against, so
+                  "Communication" becomes "weekly written project update to all stakeholders".
                 </>,
                 <>
                   <strong>The coach reviews first.</strong> On <em>Charter Reviews</em>, the coach
@@ -585,7 +585,7 @@ export default function DocsPage() {
             </p>
           </Section>
 
-          <Section id="records" title="Records, transcripts and downloads">
+          <Section id="records" title="Records and downloads">
             <p>
               Every screen writes to a record, and every record can leave the system. Under{" "}
               <em>Records &amp; Downloads</em> — scoped, as above, to the people you may read:
@@ -611,17 +611,8 @@ export default function DocsPage() {
                   recommendation, all three sign-offs and the member's verbatim comment.
                 </>,
                 <>
-                  <strong>Conversation transcript (CSV)</strong> — every entry either side added to
-                  any record, with author, role and timestamp.
-                </>,
-                <>
-                  <strong>Score summary (CSV)</strong> — one row per person: each quarter's Score 1,
-                  Score 2 and quarterly score, the half-yearly score, and the standing
-                  recommendation.
-                </>,
-                <>
-                  <strong>People and coaching map (CSV)</strong> — position, unit, year-at-level,
-                  employment type, team leader and coach.
+                  <strong>People and coaching map (CSV)</strong> — name, email, title, unit, level,
+                  coach, charter status and the half-yearly score.
                 </>,
                 <>
                   <strong>Record book (HTML)</strong> — one person's complete file, or everyone in
@@ -635,8 +626,8 @@ export default function DocsPage() {
               ]}
             />
             <p>
-              Individual forms — charter, check-in, impact statement, review — also print to PDF
-              from their own screens.
+              The record book is also reachable from a charter and from any record page, and prints
+              to PDF from the browser.
             </p>
           </Section>
 

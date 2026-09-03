@@ -1,10 +1,16 @@
 "use client";
 
-import { LibraryBig, Plus, Printer, Send, Sparkles } from "lucide-react";
-import { useId, useMemo, useState } from "react";
-
+import { LibraryBig, Plus, Printer, Save, Send, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { useActionState, useId, useMemo, useState } from "react";
+import {
+  type CharterActionResult,
+  saveCharter,
+  submitCharter,
+} from "@/app/(workspace)/charter/actions";
 import { CharterApprovalStrip } from "@/app/components/charter-approval-strip";
 import { CompetencyAnchorsDialog } from "@/app/components/competency-anchors-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,14 +27,18 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { LIBRARY_OKRS } from "@/data/library";
 import {
-  ACTIVE_CYCLE,
   APPROVER_LABEL,
   CHARTER_CHOSEN_COMPETENCIES,
   choosableCompetencies,
+  competencyByName,
   fixedCompetenciesFor,
 } from "@/data/performance";
-import { getCoach } from "@/data/people";
-import { useSession } from "@/hooks/use-session";
+import {
+  CHARTER_EDITABLE,
+  CHARTER_STATUS_LABELS,
+  type Charter,
+  type CycleSummary,
+} from "@/lib/data/performance-types";
 import type { LibraryCompetency, OkrExample } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -369,19 +379,62 @@ function CompetencyCard({
   );
 }
 
-export function CharterEditor() {
-  const { person } = useSession();
-  const coach = getCoach(person);
+export function CharterEditor({
+  cycle,
+  charter,
+  competencyIds,
+  personName,
+  unitName,
+  coachName,
+}: {
+  cycle: CycleSummary;
+  charter: Charter | null;
+  /** Competency name to its `public.competencies` id, from the loaded library. */
+  competencyIds: Record<string, number>;
+  personName: string;
+  unitName: string;
+  coachName: string | null;
+}) {
   const fixed = fixedCompetenciesFor();
+  const [saveState, saveAction, saving] = useActionState(saveCharter, { error: null });
+  const [sendState, sendAction, sending] = useActionState(async () => submitCharter(), {
+    error: null,
+  } as CharterActionResult);
 
-  const [nextId, setNextId] = useState(2);
-  const [goals, setGoals] = useState<GoalDraft[]>([emptyGoal("goal-1")]);
-  const [commitments, setCommitments] = useState<Record<string, string>>({});
-  const [chosen, setChosen] = useState<LibraryCompetency[]>([]);
-  const [sent, setSent] = useState(false);
+  const editable = charter === null || CHARTER_EDITABLE.includes(charter.status);
+  const status = charter?.status ?? "draft";
 
-  const goalsLeft = ACTIVE_CYCLE.maxGoals - goals.length;
+  // A saved charter seeds the editor; an unsaved one starts with a single row
+  // so there is always something to type into.
+  const [nextId, setNextId] = useState(() => (charter?.goals.length ?? 0) + 2);
+  const [goals, setGoals] = useState<GoalDraft[]>(() =>
+    charter && charter.goals.length > 0
+      ? charter.goals.map((goal) => ({
+          id: `goal-${goal.id}`,
+          objective: goal.outcome,
+          keyResult: goal.keyResult,
+          baseline: goal.baseline,
+          target: goal.target,
+          dataSource: goal.dataSource,
+        }))
+      : [emptyGoal("goal-1")],
+  );
+  const [commitments, setCommitments] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (charter?.competencies ?? []).map((competency) => [competency.name, competency.commitment]),
+    ),
+  );
+  const [chosen, setChosen] = useState<LibraryCompetency[]>(() => {
+    const fixedNames = new Set(fixed.map((competency) => competency.name));
+    return (charter?.competencies ?? [])
+      .filter((competency) => !fixedNames.has(competency.name))
+      .map((competency) => competencyByName(competency.name))
+      .filter((competency): competency is LibraryCompetency => Boolean(competency));
+  });
+
+  const goalsLeft = cycle.maxGoals - goals.length;
   const stillToChoose = CHARTER_CHOSEN_COMPETENCIES - chosen.length;
+  const libraryLoaded = Object.keys(competencyIds).length > 0;
 
   const addGoal = (example?: OkrExample) => {
     if (goalsLeft <= 0) return;
@@ -395,18 +448,46 @@ export function CharterEditor() {
       current.length >= CHARTER_CHOSEN_COMPETENCIES ? current : [...current, competency],
     );
 
+  /* The two hidden payloads the action parses. Serialising here keeps the
+     order on screen identical to the order that is stored. */
+  const goalsPayload = JSON.stringify(
+    goals.map((goal) => ({
+      outcome: goal.objective,
+      keyResult: goal.keyResult,
+      baseline: goal.baseline,
+      target: goal.target,
+      dataSource: goal.dataSource,
+    })),
+  );
+
+  const competenciesPayload = JSON.stringify(
+    [...fixed, ...chosen]
+      .map((competency) => ({
+        competencyId: competencyIds[competency.name],
+        selectionType: competency.mandatory ? "fixed" : "selected",
+        commitment: commitments[competency.name] ?? "",
+      }))
+      .filter((entry) => Number.isInteger(entry.competencyId)),
+  );
+
+  const message = saveState.message ?? sendState.message ?? null;
+  const error = saveState.error ?? sendState.error ?? null;
+
   return (
-    <div className="space-y-10">
-      <CharterApprovalStrip currentStep={sent ? 2 : 1} />
+    <form action={saveAction} className="space-y-10">
+      <input type="hidden" name="goals" value={goalsPayload} />
+      <input type="hidden" name="competencies" value={competenciesPayload} />
+
+      <CharterApprovalStrip currentStep={status === "draft" ? 1 : 2} />
 
       <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Goal Charter &middot; {ACTIVE_CYCLE.name}
+            Goal Charter &middot; {cycle.name}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {person.name} &middot; {person.unit}
-            {coach ? ` · coach: ${coach.name}` : null}
+            {personName} &middot; {unitName}
+            {coachName ? ` · coach: ${coachName}` : null}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -414,34 +495,85 @@ export function CharterEditor() {
             variant="secondary"
             className="uppercase tracking-[0.14em] text-[0.65rem] text-muted-foreground"
           >
-            {sent ? "With your coach" : "Draft"}
+            {CHARTER_STATUS_LABELS[status]}
           </Badge>
-          <Button disabled={sent} onClick={() => setSent(true)}>
-            <Send />
-            {sent ? "Sent to your coach" : "Send to my coach"}
+          <Button type="submit" variant="outline" disabled={!editable || saving}>
+            <Save />
+            {saving ? "Saving…" : "Save draft"}
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer />
-            Print / PDF
-          </Button>
+          {charter ? (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`/book/${charter.participantId}`} target="_blank" />}
+            >
+              <Printer />
+              Print / PDF
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      {!libraryLoaded ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            The competency library has not been loaded into this workspace yet, so competency
+            commitments cannot be saved. An administrator loads it from Cycles &amp; settings.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {message && !error ? (
+        <Alert>
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {charter?.decisions.length ? (
+        <Card>
+          <CardContent className="grid gap-3">
+            <Eyebrow>Review history</Eyebrow>
+            {charter.decisions.map((decision) => (
+              <div key={decision.id} className="rounded-xl border p-3 text-sm">
+                <p className="font-medium">
+                  {decision.actorName} &middot;{" "}
+                  {decision.capacity === "coach" ? "Coach" : APPROVER_LABEL} &middot;{" "}
+                  {decision.decision.replace(/_/g, " ")}
+                </p>
+                {decision.comment ? (
+                  <p className="mt-1 leading-6 text-muted-foreground">{decision.comment}</p>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <section>
         <SectionHeading
           title="Goals"
-          description={`Maximum ${ACTIVE_CYCLE.maxGoals}. Every goal needs a measurable key result and a named data source.`}
+          description={`Maximum ${cycle.maxGoals}. Every goal needs a measurable key result and a named data source.`}
           actions={
             <>
               <Badge variant="outline" className="mr-1">
-                {goals.length} of {ACTIVE_CYCLE.maxGoals}
+                {goals.length} of {cycle.maxGoals}
               </Badge>
               <GoalLibraryDialog
-                defaultUnit={person.unit}
-                disabled={goalsLeft <= 0}
+                defaultUnit={unitName}
+                disabled={goalsLeft <= 0 || !editable}
                 onPick={addGoal}
               />
-              <Button variant="outline" disabled={goalsLeft <= 0} onClick={() => addGoal()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={goalsLeft <= 0 || !editable}
+                onClick={() => addGoal()}
+              >
                 <Plus />
                 Write my own
               </Button>
@@ -490,7 +622,7 @@ export function CharterEditor() {
               )}
               <CompetencyPickerDialog
                 taken={chosen.map((item) => item.name)}
-                disabled={stillToChoose <= 0}
+                disabled={stillToChoose <= 0 || !editable}
                 onPick={pickCompetency}
               />
             </>
@@ -516,24 +648,23 @@ export function CharterEditor() {
               }
             />
           ))}
-          {Array.from({ length: Math.max(stillToChoose, 0) }).map((_, index) => (
-            <Card
-              key={`open-slot-${fixed.length + chosen.length + index}`}
-              className="border-dashed bg-muted/30"
-            >
+          {/* One placeholder per competency still to choose. The slot number is
+              its position in the charter, which is what makes it a stable key. */}
+          {Array.from(
+            { length: Math.max(stillToChoose, 0) },
+            (_, slot) => fixed.length + chosen.length + slot + 1,
+          ).map((position) => (
+            <Card key={`open-slot-${position}`} className="border-dashed bg-muted/30">
               <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <Eyebrow>
-                    Competency {fixed.length + chosen.length + index + 1} &middot; Chosen with your
-                    coach
-                  </Eyebrow>
+                  <Eyebrow>Competency {position} &middot; Chosen with your coach</Eyebrow>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Pick one from the library that matches the work of this cycle.
                   </p>
                 </div>
                 <CompetencyPickerDialog
                   taken={chosen.map((item) => item.name)}
-                  disabled={false}
+                  disabled={!editable}
                   onPick={pickCompetency}
                 />
               </CardContent>
@@ -542,11 +673,11 @@ export function CharterEditor() {
         </div>
       </section>
 
-      <Card className={cn("bg-accent/40", sent && "bg-primary/10")}>
+      <Card className={cn("bg-accent/40", !editable && "bg-primary/10")}>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-heading text-base font-semibold">
-              {sent ? "Sent to your coach" : "Ready to send?"}
+              {editable ? "Ready to send?" : CHARTER_STATUS_LABELS[status]}
             </p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Your coach reviews first &mdash; refining targets and checking measurability &mdash;
@@ -554,12 +685,17 @@ export function CharterEditor() {
               cycle.
             </p>
           </div>
-          <Button className="shrink-0" disabled={sent} onClick={() => setSent(true)}>
+          <Button
+            type="submit"
+            formAction={sendAction}
+            className="shrink-0"
+            disabled={!editable || sending || charter === null}
+          >
             <Send />
-            {sent ? "Sent to your coach" : "Send to my coach"}
+            {sending ? "Sending…" : editable ? "Send to my coach" : CHARTER_STATUS_LABELS[status]}
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </form>
   );
 }

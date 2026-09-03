@@ -1,5 +1,5 @@
 import { PageHeader } from "@/app/components/page-header";
-import { PeopleTable } from "@/app/components/people-table";
+import { PeopleRoster } from "@/app/components/people-roster";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PEOPLE } from "@/data/people";
 import { LEVELS } from "@/data/performance";
-import type { Person } from "@/lib/types";
+import { getRoster } from "@/lib/data/roster";
+import { EMPLOYMENT_LABELS, type RosterPerson } from "@/lib/data/roster-fields";
 
 const ROLE_DUTIES = [
   [
@@ -34,12 +34,13 @@ const ALLOCATION_RULES = [
   "Six to eight coachees is a workable load at 15 minutes a month each plus quarterly scoring.",
   "Any change of coach is communicated one-to-one before it shows up here.",
   "The Coach column is the access control: it decides whose records that coach can open and download.",
+  "Authority is separate from coaching: Founder and People & HR carry administrator access, everyone else earns the coach role by having coachees.",
 ];
 
-function tally<K extends keyof Person>(key: K) {
+function tally(people: RosterPerson[], read: (person: RosterPerson) => string) {
   const counts = new Map<string, number>();
-  for (const person of PEOPLE) {
-    const value = String(person[key]);
+  for (const person of people) {
+    const value = read(person);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return [...counts].sort((a, b) => b[1] - a[1]);
@@ -49,12 +50,13 @@ function HeadcountCard({
   title,
   label,
   rows,
+  total,
 }: {
   title: string;
   label: string;
   rows: [string, number][];
+  total: number;
 }) {
-  const total = PEOPLE.length;
   return (
     <Card>
       <CardHeader>
@@ -78,7 +80,7 @@ function HeadcountCard({
                 <TableCell>{name}</TableCell>
                 <TableCell className="text-right tabular-nums">{count}</TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {Math.round((count / total) * 100)}%
+                  {total ? Math.round((count / total) * 100) : 0}%
                 </TableCell>
               </TableRow>
             ))}
@@ -89,20 +91,22 @@ function HeadcountCard({
   );
 }
 
-export default function PeoplePage() {
-  const admins = PEOPLE.filter((person) => person.role === "admin").length;
-  const coaches = PEOPLE.filter((person) => person.role === "coach").length;
-  const members = PEOPLE.filter((person) => person.role === "member").length;
-  const byLevel = tally("level")
-    .sort((a, b) => Number(a[0]) - Number(b[0]))
-    .map(([value, count]) => [`Level ${value}`, count] as [string, number]);
+export default async function PeoplePage() {
+  const roster = await getRoster();
+  const active = roster.people.filter((person) => person.active);
+  const admins = active.filter((person) => person.role === "admin").length;
+  const coaches = active.filter((person) => person.role === "coach").length;
+  const members = active.filter((person) => person.role === "member").length;
+  const byLevel = tally(active, (person) => `Level ${person.level}`).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
 
   return (
     <>
       <PageHeader
-        eyebrow={`${PEOPLE.length} people`}
+        eyebrow={`${active.length} people`}
         title="People & coaches"
-        description="Seeded from the headcount report and maintained here. A person's coach decides exactly what that coach can read and download, so changing that column changes their access."
+        description="The source of truth for the roster: names, units, levels, employment, authority and coaching lines. A person's coach decides exactly what that coach can read and download, so changing that column changes their access."
         action={
           <>
             <Badge variant="outline">{admins} administrators</Badge>
@@ -111,14 +115,25 @@ export default function PeoplePage() {
           </>
         }
       />
-      <PeopleTable people={PEOPLE} />
+      <PeopleRoster roster={roster} />
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <HeadcountCard title="Headcount by unit" label="Unit" rows={tally("unit")} />
-        <HeadcountCard title="Headcount by year-at-level" label="Level (YAL)" rows={byLevel} />
+        <HeadcountCard
+          title="Headcount by unit"
+          label="Unit"
+          rows={tally(active, (person) => person.unitName)}
+          total={active.length}
+        />
+        <HeadcountCard
+          title="Headcount by year-at-level"
+          label="Level (YAL)"
+          rows={byLevel}
+          total={active.length}
+        />
         <HeadcountCard
           title="Headcount by employment type"
           label="Employment type"
-          rows={tally("employment")}
+          rows={tally(active, (person) => EMPLOYMENT_LABELS[person.employment])}
+          total={active.length}
         />
       </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
