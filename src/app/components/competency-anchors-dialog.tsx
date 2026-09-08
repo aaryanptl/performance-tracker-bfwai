@@ -40,9 +40,7 @@ export function CompetencyAnchorsDialog({ competency }: { competency: LibraryCom
             <div
               key={anchor.value}
               className={
-                anchor.value === 5
-                  ? "rounded-xl bg-accent/50 p-4"
-                  : "rounded-xl bg-muted/50 p-4"
+                anchor.value === 5 ? "rounded-xl bg-accent/50 p-4" : "rounded-xl bg-muted/50 p-4"
               }
             >
               <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">

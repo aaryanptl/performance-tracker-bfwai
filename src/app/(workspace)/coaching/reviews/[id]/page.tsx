@@ -1,12 +1,13 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { PageHeader } from "@/app/components/page-header";
 import { ReviewForm } from "@/app/components/performance-forms";
-import { ReleaseReviewButton } from "@/app/components/record-actions";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveCycle, getParticipantById } from "@/lib/data/cycle";
 import { REVIEW_STATUS_LABELS } from "@/lib/data/performance-types";
-import { getCharter, getReviews } from "@/lib/data/records";
+import { getCharter, getImpactStatements, getReviews } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,14 +24,15 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const cycle = await getActiveCycle(viewer.supabase);
   if (!cycle) notFound();
 
-  const [charter, reviews] = await Promise.all([
+  const [charter, impacts, reviews] = await Promise.all([
     getCharter(viewer.supabase, participantId),
+    getImpactStatements(viewer.supabase, participantId),
     getReviews(viewer.supabase, participantId),
   ]);
 
   // Only an approved charter is a fair basis to score against.
   const goals = charter?.status === "approved_locked" ? charter.goals : (charter?.goals ?? []);
-  const releasable = reviews.filter(
+  const calibratable = reviews.filter(
     (review) =>
       review.okrRating !== null && review.competencyRating !== null && review.releasedAt === null,
   );
@@ -43,13 +45,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         description="Rate the work against agreed outcomes and the behaviours expected at the person's level."
       />
 
-      {viewer.isAdmin && releasable.length > 0 ? (
+      {viewer.isAdmin && calibratable.length > 0 ? (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Ready to release</CardTitle>
+            <CardTitle>Ready for calibration</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {releasable.map((review) => (
+            {calibratable.map((review) => (
               <div
                 key={review.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
@@ -57,11 +59,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
                 <div>
                   <p className="font-medium">{review.quarterName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {REVIEW_STATUS_LABELS[review.status]} &middot; score{" "}
+                    {REVIEW_STATUS_LABELS[review.status]} &middot; calculated score{" "}
                     {review.quarterlyScore?.toFixed(2) ?? "—"}
                   </p>
                 </div>
-                <ReleaseReviewButton reviewId={review.id} />
+                <Button nativeButton={false} render={<Link href="/admin/calibration" />}>
+                  Open calibration
+                </Button>
               </div>
             ))}
           </CardContent>
@@ -73,6 +77,9 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         personName={participant.personName}
         quarters={cycle.quarters}
         goals={goals}
+        okrWeight={cycle.okrWeight}
+        competencyWeight={cycle.competencyWeight}
+        impacts={impacts}
         reviews={reviews}
       />
     </>

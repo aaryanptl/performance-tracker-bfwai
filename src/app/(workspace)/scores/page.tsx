@@ -35,7 +35,7 @@ export default async function ScoresPage() {
       const review = released.find((entry) => entry.quarterId === quarter.id);
       return {
         label: quarter.name,
-        value: review?.quarterlyScore ?? null,
+        value: review?.calibratedScore ?? review?.quarterlyScore ?? null,
       };
     }),
     { label: "Half-yearly · (Q1 + Q2) ÷ 2", value: half },
@@ -44,9 +44,9 @@ export default async function ScoresPage() {
   return (
     <>
       <PageHeader
-        eyebrow="60% outcomes · 40% competencies"
+        eyebrow={`${Math.round((cycle?.okrWeight ?? 0.6) * 100)}% outcomes · ${Math.round((cycle?.competencyWeight ?? 0.4) * 100)}% competencies`}
         title="My scores"
-        description="Scores are given every quarter. The half-yearly score is the plain average of the two; the annual score is the average of the halves. Nothing is weighted beyond the 0.6/0.4 split between what you delivered and how."
+        description={`Scores are given every quarter. The half-yearly score is the plain average of the two; the annual score is the average of the halves. Quarterly scores use the cycle's ${Math.round((cycle?.okrWeight ?? 0.6) * 100)}/${Math.round((cycle?.competencyWeight ?? 0.4) * 100)} blend between what you delivered and how.`}
         action={<ScoringGuideDialog />}
       />
 
@@ -106,8 +106,27 @@ export default async function ScoresPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">Quarterly score</p>
                     <p className="font-heading text-xl font-semibold">
-                      {review.quarterlyScore?.toFixed(2) ?? "—"}
+                      {review.calibratedScore?.toFixed(2) ??
+                        review.quarterlyScore?.toFixed(2) ??
+                        "—"}
                     </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="bg-primary"
+                      style={{ width: `${(cycle?.okrWeight ?? 0.6) * 100}%` }}
+                    />
+                    <div
+                      className="bg-secondary"
+                      style={{ width: `${(cycle?.competencyWeight ?? 0.4) * 100}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Score 1 · {Math.round((cycle?.okrWeight ?? 0.6) * 100)}%</span>
+                    <span>Score 2 · {Math.round((cycle?.competencyWeight ?? 0.4) * 100)}%</span>
                   </div>
                 </div>
 
@@ -144,6 +163,53 @@ export default async function ScoresPage() {
                     <p className="text-muted-foreground">
                       {RECOMMENDATION_LABELS[review.recommendation]}
                     </p>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+                  <p className="font-medium">Signatures</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {(["coach", "founder", "participant"] as const).map((capacity) => {
+                      const signature = review.acknowledgments.find(
+                        (entry) => entry.capacity === capacity,
+                      );
+                      const label =
+                        capacity === "founder"
+                          ? "Leadership"
+                          : capacity === "participant"
+                            ? "You"
+                            : "Coach";
+                      return (
+                        <div key={capacity}>
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <p className="font-medium">
+                            {signature?.actorName ??
+                              (capacity === "participant" && review.status === "released"
+                                ? "Awaiting your acknowledgement"
+                                : "Awaiting sign-off")}
+                          </p>
+                          {signature?.comment ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {signature.comment}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {review.transcript.length > 0 ? (
+                  <div className="grid gap-2 rounded-xl border bg-muted/20 p-4">
+                    <p className="font-medium">Conversation transcript</p>
+                    {review.transcript.map((entry) => (
+                      <div key={entry.id} className="rounded-lg border bg-background p-3">
+                        <p className="text-xs text-muted-foreground">
+                          {entry.authorName} · {entry.createdAt.slice(0, 10)}
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap">{entry.body}</p>
+                      </div>
+                    ))}
                   </div>
                 ) : null}
 

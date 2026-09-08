@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { LIBRARY_COMPETENCIES } from "@/data/library";
 import { COACH_ADDON_UNIT } from "@/data/performance";
 import { getViewer } from "@/lib/data/viewer";
+import { formatDate } from "@/lib/utils";
 
 export interface CycleActionResult {
   error: string | null;
@@ -18,6 +19,92 @@ function refresh() {
   revalidatePath("/admin/dashboard");
   revalidatePath("/charter");
   revalidatePath("/");
+}
+
+function readDate(formData: FormData, key: string) {
+  return String(formData.get(key) ?? "").trim();
+}
+
+/** Update an existing cycle and keep its generated quarter dates in sync. */
+export async function updateCycle(cycleId: number, formData: FormData): Promise<CycleActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  if (!viewer.isAdmin) return { error: "Only an administrator can update a cycle." };
+  if (!Number.isInteger(cycleId) || cycleId <= 0) return { error: "Choose a valid cycle." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const startDate = readDate(formData, "start_date");
+  const endDate = readDate(formData, "end_date");
+  const goalWindowStart = readDate(formData, "goal_window_start");
+  const goalWindowEnd = readDate(formData, "goal_window_end");
+  const okrWeight = Number(formData.get("okr_weight"));
+  const competencyWeight = Number(formData.get("competency_weight"));
+  const maxGoals = Number(formData.get("max_goals"));
+
+  if (!name) return { error: "Give the cycle a name." };
+  if (![startDate, endDate, goalWindowStart, goalWindowEnd].every(Boolean)) {
+    return { error: "Set all cycle dates." };
+  }
+  if (endDate < startDate) return { error: "The cycle cannot end before it starts." };
+  if (goalWindowEnd < goalWindowStart || goalWindowEnd > startDate) {
+    return { error: "The goal window must close on or before the cycle starts." };
+  }
+  if (!Number.isFinite(okrWeight) || !Number.isFinite(competencyWeight)) {
+    return { error: "Enter both score weights." };
+  }
+  if (Math.abs(okrWeight + competencyWeight - 1) > 0.001) {
+    return { error: "The two score weights must add up to 1.00." };
+  }
+  if (!Number.isInteger(maxGoals) || maxGoals < 1 || maxGoals > 5) {
+    return { error: "Maximum goals must be between 1 and 5." };
+  }
+
+  const { error } = await viewer.supabase
+    .from("cycles")
+    .update({
+      name,
+      start_date: startDate,
+      end_date: endDate,
+      goal_window_start: goalWindowStart,
+      goal_window_end: goalWindowEnd,
+      okr_weight: okrWeight,
+      competency_weight: competencyWeight,
+      max_goals: maxGoals,
+    })
+    .eq("id", cycleId);
+  if (error) return { error: `The cycle could not be updated: ${error.message}` };
+
+  const { data: quarters } = await viewer.supabase
+    .from("quarters")
+    .select("id, sequence")
+    .eq("cycle_id", cycleId)
+    .order("sequence")
+    .returns<{ id: number; sequence: number }[]>();
+  for (const quarter of quarters ?? []) {
+    const offset = (quarter.sequence - 1) * 3;
+    const start = monthStart(startDate, offset);
+    const end = monthEnd(startDate, offset + 2);
+    const name = String(formData.get(`quarter_name_${quarter.id}`) ?? "").trim();
+    const scoreBy = readDate(formData, `quarter_score_by_${quarter.id}`);
+    const fullReview = String(formData.get(`quarter_full_review_${quarter.id}`) ?? "") === "true";
+    if (!name) return { error: `Give Q${quarter.sequence} a label.` };
+    if (!scoreBy) return { error: `Set the score-by date for Q${quarter.sequence}.` };
+    const { error: quarterError } = await viewer.supabase
+      .from("quarters")
+      .update({
+        name,
+        start_date: start,
+        end_date: end,
+        scoring_due_at: `${scoreBy}T23:59:59.000Z`,
+        is_full_review: fullReview,
+      })
+      .eq("id", quarter.id);
+    if (quarterError)
+      return { error: `The quarters could not be updated: ${quarterError.message}` };
+  }
+
+  refresh();
+  return { error: null, message: "Cycle settings saved." };
 }
 
 /** First day of the month `offset` months after `start`, as an ISO date. */
@@ -206,7 +293,7 @@ export async function openCycle(
   }
   if (goalWindowEnd > startDate) {
     return {
-      error: `The goal window must close on or before the cycle starts — it closes ${goalWindowEnd} but the cycle starts ${startDate}.`,
+      error: `The goal window must close on or before the cycle starts — it closes ${formatDate(goalWindowEnd)} but the cycle starts ${formatDate(startDate)}.`,
     };
   }
 
@@ -240,6 +327,8 @@ export async function openCycle(
       name: quarterName(sequence, start, end),
       start_date: start,
       end_date: end,
+      scoring_due_at: `${end}T23:59:59.000Z`,
+      is_full_review: sequence === 2,
       status: "scheduled",
     };
   });
@@ -305,9 +394,64 @@ export async function setCycleStatus(
   if (!viewer) return { error: "Your session has expired. Sign in again." };
   if (!viewer.isAdmin) return { error: "Only an administrator can change the cycle." };
 
-  const { error } = await viewer.supabase.from("cycles").update({ status }).eq("id", cycleId);
+  if (status === "active") {
+    const { error: closeError } = await viewer.supabase
+      .from("cycles")
+      .update({ status: "closed" })
+      .eq("organization_id", viewer.organizationId)
+      .eq("status", "active")
+      .neq("id", cycleId);
+    if (closeError)
+      return { error: `The previous current cycle could not be closed: ${closeError.message}` };
+  }
+
+  const { error } = await viewer.supabase
+    .from("cycles")
+    .update({ status })
+    .eq("id", cycleId)
+    .eq("organization_id", viewer.organizationId);
   if (error) return { error: `The cycle could not be updated: ${error.message}` };
 
   refresh();
   return OK;
+}
+
+/** Remove only an unused cycle; historical cycles are closed, not deleted. */
+export async function removeCycle(cycleId: number): Promise<CycleActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  if (!viewer.isAdmin) return { error: "Only an administrator can remove a cycle." };
+  if (!Number.isInteger(cycleId) || cycleId <= 0) return { error: "Choose a valid cycle." };
+
+  const { data: cycle } = await viewer.supabase
+    .from("cycles")
+    .select("id, status")
+    .eq("id", cycleId)
+    .eq("organization_id", viewer.organizationId)
+    .maybeSingle<{ id: number; status: string }>();
+  if (!cycle) return { error: "That cycle is not available to you." };
+  if (cycle.status === "active") return { error: "Change the current cycle before removing it." };
+
+  const { count, error: countError } = await viewer.supabase
+    .from("cycle_participants")
+    .select("id", { count: "exact", head: true })
+    .eq("cycle_id", cycleId);
+  if (countError)
+    return { error: `The cycle contents could not be checked: ${countError.message}` };
+  if ((count ?? 0) > 0) {
+    return { error: "This cycle has enrolled records. Set it to Closed to preserve its history." };
+  }
+
+  const { data: removed, error } = await viewer.supabase
+    .from("cycles")
+    .delete()
+    .eq("id", cycleId)
+    .eq("organization_id", viewer.organizationId)
+    .select("id")
+    .maybeSingle<{ id: number }>();
+  if (error) return { error: `The cycle could not be removed: ${error.message}` };
+  if (!removed) return { error: "The cycle could not be removed in its current state." };
+
+  refresh();
+  return { error: null, message: "Unused cycle removed." };
 }

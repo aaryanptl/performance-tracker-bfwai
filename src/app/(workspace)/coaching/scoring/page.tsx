@@ -1,12 +1,24 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/app/components/page-header";
-import { ParticipantTable } from "@/app/components/participant-table";
 import { RatingTraps } from "@/app/components/rating-traps";
 import { ScoringGuideDialog } from "@/app/components/scoring-guide-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { SCORE_BANDS } from "@/data/performance";
 import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { REVIEW_STATUS_LABELS } from "@/lib/data/performance-types";
+import { getPersonRecord } from "@/lib/data/person-record";
 import { getViewer } from "@/lib/data/viewer";
 
 const STEPS = [
@@ -26,6 +38,12 @@ export default async function ScoringPage() {
   const scoreable = viewer.isAdmin
     ? participants
     : participants.filter((participant) => participant.coachId === viewer.personId);
+  const records = await Promise.all(
+    scoreable.map(async (participant) => ({
+      participant,
+      record: await getPersonRecord(viewer.supabase, participant.id),
+    })),
+  );
 
   return (
     <>
@@ -65,15 +83,109 @@ export default async function ScoringPage() {
         </Card>
         <RatingTraps />
       </div>
-      <ParticipantTable
-        participants={scoreable}
-        action="review"
-        emptyMessage={
-          cycle
-            ? "No one in your scope is ready to be scored yet."
-            : "No cycle is open yet. An administrator opens the cycle and enrols the roster."
-        }
-      />
+
+      {!cycle || records.length === 0 ? (
+        <Card>
+          <CardContent className="text-sm text-muted-foreground">
+            {cycle
+              ? "No one in your scope is ready to be scored yet."
+              : "No cycle is open yet. An administrator opens the cycle and enrols the roster."}
+          </CardContent>
+        </Card>
+      ) : (
+        cycle.quarters.map((quarter) => (
+          <section key={quarter.id} className="mb-6">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="font-heading text-lg font-semibold">{quarter.name}</h2>
+                <p className="text-sm text-muted-foreground">
+                  Score by{" "}
+                  {new Intl.DateTimeFormat("en-GB", {
+                    dateStyle: "medium",
+                    timeZone: "UTC",
+                  }).format(
+                    new Date(`${quarter.scoringDueAt?.slice(0, 10) ?? quarter.endDate}T00:00:00Z`),
+                  )}
+                  {quarter.isFullReview ? " · full review quarter" : ""}
+                </p>
+              </div>
+            </div>
+            <Card>
+              <CardContent className="px-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Person</TableHead>
+                        <TableHead>Impact statement</TableHead>
+                        <TableHead>Goals scored</TableHead>
+                        <TableHead>Score 1</TableHead>
+                        <TableHead>Score 2</TableHead>
+                        <TableHead>Quarterly</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {records.map(({ participant, record }) => {
+                        const review = record?.reviews.find(
+                          (entry) => entry.quarterId === quarter.id,
+                        );
+                        const statement = record?.impactStatements.find(
+                          (entry) => entry.quarterId === quarter.id,
+                        );
+                        const goalTotal = record?.charter?.goals.length ?? 0;
+                        const scored = review?.goalScores.length ?? 0;
+                        const finalScore = review?.calibratedScore ?? review?.quarterlyScore;
+                        return (
+                          <TableRow key={participant.id}>
+                            <TableCell>
+                              <p className="font-medium">{participant.personName}</p>
+                              <p className="text-xs text-muted-foreground">{participant.title}</p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={statement?.submittedAt ? "default" : "outline"}>
+                                {statement?.submittedAt ? "Shared" : "Not shared"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="tabular-nums">
+                              {goalTotal ? `${scored}/${goalTotal}` : "—"}
+                            </TableCell>
+                            <TableCell className="tabular-nums">
+                              {review?.okrRating ?? "—"}
+                            </TableCell>
+                            <TableCell className="tabular-nums">
+                              {review?.competencyRating ?? "—"}
+                            </TableCell>
+                            <TableCell className="font-medium tabular-nums">
+                              {finalScore?.toFixed(2) ?? "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                nativeButton={false}
+                                render={<Link href={`/coaching/reviews/${participant.id}`} />}
+                              >
+                                {review ? "Open" : "Start"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        ))
+      )}
     </>
   );
 }

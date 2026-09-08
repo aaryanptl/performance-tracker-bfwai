@@ -111,6 +111,8 @@ export interface QuarterSummary {
   name: string;
   startDate: string;
   endDate: string;
+  scoringDueAt: string | null;
+  isFullReview: boolean;
   status: string;
 }
 
@@ -179,13 +181,20 @@ export interface CheckInRecord {
   status: CheckInStatus;
   coachName: string | null;
   notes: {
+    openContext: string | null;
     progressSummary: string;
     blockers: string | null;
-    recognition: string | null;
     wayForward: string;
-    supportToArrange: string | null;
   } | null;
   acknowledgedByParticipant: boolean;
+  transcript: TranscriptEntry[];
+}
+
+export interface TranscriptEntry {
+  id: number;
+  authorName: string;
+  body: string;
+  createdAt: string;
 }
 
 export interface ImpactItem {
@@ -206,6 +215,7 @@ export interface ImpactStatement {
   learningCarriedForward: string | null;
   submittedAt: string | null;
   items: ImpactItem[];
+  transcript: TranscriptEntry[];
 }
 
 export interface GoalScore {
@@ -226,6 +236,7 @@ export interface QuarterlyReview {
   goalAttainmentAverage: number | null;
   okrRating: number | null;
   competencyRating: number | null;
+  calibratedScore: number | null;
   quarterlyScore: number | null;
   coachVerifiedImpact: string | null;
   developmentNeeds: string | null;
@@ -234,6 +245,39 @@ export interface QuarterlyReview {
   status: ReviewStatus;
   releasedAt: string | null;
   goalScores: GoalScore[];
+  calibrationEvents: CalibrationEvent[];
+  acknowledgments: ReviewAcknowledgment[];
+  transcript: TranscriptEntry[];
+}
+
+export interface ReviewAcknowledgment {
+  actorName: string;
+  capacity: "coach" | "founder" | "participant";
+  decision: "signed" | "acknowledged";
+  comment: string | null;
+  acknowledgedAt: string;
+}
+
+export interface CalibrationEvent {
+  id: number;
+  actorName: string;
+  previousOkrRating: number | null;
+  newOkrRating: number | null;
+  previousCompetencyRating: number | null;
+  newCompetencyRating: number | null;
+  previousCalibratedScore: number | null;
+  newCalibratedScore: number | null;
+  rationale: string;
+  createdAt: string;
+}
+
+export interface DevelopmentAction {
+  id: number;
+  actionText: string;
+  supportType: string | null;
+  dueDate: string | null;
+  status: "planned" | "in_progress" | "complete" | "cancelled";
+  completedAt: string | null;
 }
 
 /** Everything one person's cycle contains, assembled for a record page or book. */
@@ -244,6 +288,7 @@ export interface PersonRecord {
   checkIns: CheckInRecord[];
   impactStatements: ImpactStatement[];
   reviews: QuarterlyReview[];
+  developmentActions: DevelopmentAction[];
 }
 
 /** The half-yearly score: the plain average of the released quarterly scores. */
@@ -252,6 +297,9 @@ export function halfYearScore(reviews: QuarterlyReview[]): number | null {
     (review) => review.quarterlyScore !== null && review.releasedAt !== null,
   );
   if (released.length === 0) return null;
-  const total = released.reduce((sum, review) => sum + (review.quarterlyScore ?? 0), 0);
+  const total = released.reduce(
+    (sum, review) => sum + (review.calibratedScore ?? review.quarterlyScore ?? 0),
+    0,
+  );
   return Math.round((total / released.length) * 100) / 100;
 }

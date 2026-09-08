@@ -1,6 +1,7 @@
 "use client";
 
 import { UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 
 import { addPerson } from "@/app/(workspace)/admin/people/actions";
@@ -17,7 +18,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { RosterUnit } from "@/lib/data/roster-fields";
 
 export function AddPersonDialog({
@@ -30,6 +37,7 @@ export function AddPersonDialog({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +52,7 @@ export function AddPersonDialog({
       form.reset();
       setError(null);
       setOpen(false);
+      router.refresh();
     });
   }
 
@@ -65,14 +74,19 @@ export function AddPersonDialog({
           <PersonFormFields idPrefix="add" units={units} />
           <div className="grid gap-2">
             <Label htmlFor="add-coach">Coach</Label>
-            <NativeSelect className="w-full" defaultValue="" id="add-coach" name="coachId">
-              <NativeSelectOption value="">Assign later</NativeSelectOption>
-              {coaches.map((coach) => (
-                <NativeSelectOption key={coach.id} value={String(coach.id)}>
-                  {coach.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <Select className="w-full" defaultValue="" name="coachId">
+              <SelectTrigger id="add-coach">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Assign later</SelectItem>
+                {coaches.map((coach) => (
+                  <SelectItem key={coach.id} value={String(coach.id)}>
+                    {coach.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {error ? (
             <Alert variant="destructive">

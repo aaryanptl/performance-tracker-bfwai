@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 
 import { CheckInFramework } from "@/app/components/check-in-framework";
 import { PageHeader } from "@/app/components/page-header";
-import { ParticipantTable } from "@/app/components/participant-table";
+import { ParticipantTable, type ParticipantTableSummary } from "@/app/components/participant-table";
 import { RatingTraps } from "@/app/components/rating-traps";
 import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { getPersonRecord } from "@/lib/data/person-record";
 import { getViewer } from "@/lib/data/viewer";
 
 export default async function CoacheesPage() {
@@ -17,6 +18,42 @@ export default async function CoacheesPage() {
   // An administrator reads everyone; a coach reads themselves and their
   // coachees. Either way the coaching list is the people they actually coach.
   const coachees = participants.filter((participant) => participant.coachId === viewer.personId);
+  const summaries = Object.fromEntries(
+    await Promise.all(
+      coachees.map(async (participant) => {
+        const record = await getPersonRecord(viewer.supabase, participant.id);
+        const releasedReviews = record?.reviews.filter(
+          (review) => review.releasedAt !== null && review.quarterlyScore !== null,
+        );
+        const latestReview = releasedReviews?.at(-1);
+        const latestScore = latestReview?.calibratedScore ?? latestReview?.quarterlyScore ?? null;
+        const summary: ParticipantTableSummary = {
+          goalCount: record?.charter?.goals.length ?? 0,
+          impactCount:
+            record?.impactStatements.reduce(
+              (count, statement) => count + statement.items.length,
+              0,
+            ) ?? 0,
+          latestScore,
+          charterStatus: record?.charter ? record.charter.status.replace(/_/g, " ") : "Not started",
+          checkInCount: record?.checkIns.filter((checkIn) => checkIn.notes !== null).length ?? 0,
+          checkInTarget: 6,
+          quarterScores: Object.fromEntries(
+            (record?.reviews ?? []).map((review) => [
+              review.quarterId,
+              review.calibratedScore ?? review.quarterlyScore,
+            ]),
+          ),
+          impactPeriods: Object.fromEntries(
+            (record?.impactStatements ?? [])
+              .filter((statement) => statement.quarterId !== null)
+              .map((statement) => [statement.quarterId as number, statement.submittedAt !== null]),
+          ),
+        };
+        return [participant.id, summary] as const;
+      }),
+    ),
+  );
 
   return (
     <>
@@ -27,7 +64,9 @@ export default async function CoacheesPage() {
       />
       <ParticipantTable
         participants={coachees}
-        action="check-in"
+        action="coachee"
+        summaries={summaries}
+        periods={cycle?.quarters}
         emptyMessage={
           cycle
             ? "No one is assigned to you as a coachee in this cycle."

@@ -45,12 +45,11 @@ function parseItems(raw: FormDataEntryValue | null): ItemInput[] | string {
     const competencyDemonstrated = String(item.competencyDemonstrated ?? "").trim();
     if (!impactCreated && !numbersAndEvidence && !competencyDemonstrated) continue;
     if (!impactCreated) return "Every entry needs the impact you created.";
-    if (!numbersAndEvidence) {
-      return "Every entry needs its numbers and the evidence a coach can verify.";
-    }
     items.push({
       impactCreated,
-      numbersAndEvidence,
+      // The prototype has one results field. Keep the legacy database column
+      // populated without exposing a second, non-prototype field in the UI.
+      numbersAndEvidence: numbersAndEvidence || "Captured in the impact statement.",
       competencyDemonstrated: competencyDemonstrated || null,
     });
   }

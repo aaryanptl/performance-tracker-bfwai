@@ -1,6 +1,7 @@
 "use client";
 
 import { UserMinus, UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 
 import { savePerson, setPersonActive } from "@/app/(workspace)/admin/people/actions";
@@ -30,6 +31,7 @@ export function PersonEditSheet({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function close() {
     setError(null);
@@ -46,6 +48,7 @@ export function PersonEditSheet({
         setError(result.error);
         return;
       }
+      router.refresh();
       close();
     });
   }
@@ -58,6 +61,7 @@ export function PersonEditSheet({
         setError(result.error);
         return;
       }
+      router.refresh();
       close();
     });
   }

@@ -31,9 +31,7 @@ export function CharterApprovalStrip({
             <span
               className={cn(
                 "grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                isCurrent
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground",
+                isCurrent ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
               )}
             >
               {stepNumber}

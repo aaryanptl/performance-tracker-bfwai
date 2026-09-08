@@ -24,7 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LIBRARY_OKRS } from "@/data/library";
 import {
   APPROVER_LABEL,
@@ -144,18 +150,22 @@ function GoalLibraryDialog({
             with your own baseline and target.
           </DialogDescription>
         </DialogHeader>
-        <NativeSelect
-          aria-label="Filter by unit"
+        <Select
           className="w-full sm:w-64"
           value={unit}
-          onChange={(event) => setUnit(event.target.value)}
+          onValueChange={(value) => setUnit(value ?? "")}
         >
-          {units.map((name) => (
-            <NativeSelectOption key={name} value={name}>
-              {name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger aria-label="Filter by unit">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {units.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="grid gap-5">
           {grouped.map(([objective, examples]) => (
             <div key={objective}>
@@ -248,11 +258,13 @@ function CompetencyPickerDialog({
 function GoalCard({
   goal,
   index,
+  disabled,
   onChange,
   onRemove,
 }: {
   goal: GoalDraft;
   index: number;
+  disabled: boolean;
   onChange: (patch: Partial<GoalDraft>) => void;
   onRemove: () => void;
 }) {
@@ -270,11 +282,18 @@ function GoalCard({
               id={`${fieldId}-objective`}
               value={goal.objective}
               onChange={(event) => onChange({ objective: event.target.value })}
+              disabled={disabled}
               placeholder="My objective"
               className="mt-1 h-auto rounded-none border-x-0 border-t-0 bg-transparent px-0 pt-0 pb-1.5 font-heading text-base font-semibold placeholder:text-foreground/70 focus-visible:border-b-primary focus-visible:ring-0"
             />
           </div>
-          <Button variant="destructive" size="sm" className="shrink-0" onClick={onRemove}>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            disabled={disabled}
+            onClick={onRemove}
+          >
             Remove
           </Button>
         </div>
@@ -284,6 +303,7 @@ function GoalCard({
             id={`${fieldId}-key-result`}
             value={goal.keyResult}
             onChange={(event) => onChange({ keyResult: event.target.value })}
+            disabled={disabled}
             placeholder="the number that proves the objective happened"
             className={FIELD}
           />
@@ -295,6 +315,7 @@ function GoalCard({
               id={`${fieldId}-baseline`}
               value={goal.baseline}
               onChange={(event) => onChange({ baseline: event.target.value })}
+              disabled={disabled}
               placeholder="where you start"
               className={FIELD}
             />
@@ -305,6 +326,7 @@ function GoalCard({
               id={`${fieldId}-target`}
               value={goal.target}
               onChange={(event) => onChange({ target: event.target.value })}
+              disabled={disabled}
               placeholder="what success is"
               className={FIELD}
             />
@@ -315,6 +337,7 @@ function GoalCard({
               id={`${fieldId}-data-source`}
               value={goal.dataSource}
               onChange={(event) => onChange({ dataSource: event.target.value })}
+              disabled={disabled}
               placeholder="where the number comes from"
               className={FIELD}
             />
@@ -329,12 +352,14 @@ function CompetencyCard({
   competency,
   index,
   commitment,
+  disabled,
   onCommitmentChange,
   onRemove,
 }: {
   competency: LibraryCompetency;
   index: number;
   commitment: string;
+  disabled: boolean;
   onCommitmentChange: (value: string) => void;
   onRemove?: () => void;
 }) {
@@ -352,7 +377,7 @@ function CompetencyCard({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {onRemove ? (
-              <Button variant="destructive" size="sm" onClick={onRemove}>
+              <Button variant="destructive" size="sm" disabled={disabled} onClick={onRemove}>
                 Remove
               </Button>
             ) : null}
@@ -370,6 +395,7 @@ function CompetencyCard({
             id={`${fieldId}-commitment`}
             value={commitment}
             onChange={(event) => onCommitmentChange(event.target.value)}
+            disabled={disabled}
             placeholder="e.g. weekly written project update to all stakeholders"
             className={FIELD}
           />
@@ -586,6 +612,7 @@ export function CharterEditor({
               key={goal.id}
               goal={goal}
               index={index}
+              disabled={!editable}
               onChange={(patch) =>
                 setGoals((current) =>
                   current.map((item) => (item.id === goal.id ? { ...item, ...patch } : item)),
@@ -635,6 +662,7 @@ export function CharterEditor({
               competency={competency}
               index={index}
               commitment={commitments[competency.name] ?? ""}
+              disabled={!editable}
               onCommitmentChange={(value) =>
                 setCommitments((current) => ({ ...current, [competency.name]: value }))
               }

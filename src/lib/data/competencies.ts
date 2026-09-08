@@ -8,9 +8,7 @@ import type { SupabaseClient } from "@/lib/data/viewer";
  * foreign key a charter row needs. An empty map means the library has not been
  * loaded into this workspace yet.
  */
-export async function getCompetencyIds(
-  supabase: SupabaseClient,
-): Promise<Record<string, number>> {
+export async function getCompetencyIds(supabase: SupabaseClient): Promise<Record<string, number>> {
   const { data } = await supabase
     .from("competencies")
     .select("id, name")

@@ -17,6 +17,7 @@ function refresh() {
   revalidatePath("/coaching/check-ins");
   revalidatePath("/coaching/scoring");
   revalidatePath("/coaching/approvals");
+  revalidatePath("/admin/calibration");
   revalidatePath("/scores");
   revalidatePath("/records");
   revalidatePath("/");
@@ -49,14 +50,19 @@ export async function recordCheckIn(
     return { error: "Choose the month this check-in covers." };
   }
 
+  const heldAtInput = String(formData.get("held_at") ?? "").trim();
+  const heldAt = /^\d{4}-\d{2}-\d{2}$/.test(heldAtInput)
+    ? new Date(`${heldAtInput}T12:00:00Z`).toISOString()
+    : new Date().toISOString();
+
+  const openContext = String(formData.get("open_context") ?? "").trim() || null;
   const progressSummary = String(formData.get("progress_summary") ?? "").trim();
   const wayForward = String(formData.get("way_forward") ?? "").trim();
   if (!progressSummary) return { error: "Record what was discussed." };
   if (!wayForward) return { error: "Record the way forward — what happens next, and who owes it." };
 
   const blockers = String(formData.get("blockers") ?? "").trim() || null;
-  const recognition = String(formData.get("recognition") ?? "").trim() || null;
-  const supportToArrange = String(formData.get("support_to_arrange") ?? "").trim() || null;
+  const transcript = String(formData.get("transcript") ?? "").trim();
 
   const participant = await getParticipantById(supabase, participantId);
   if (!participant) return { error: "That person is not in your coaching scope." };
@@ -85,7 +91,7 @@ export async function recordCheckIn(
         coach_id: viewer.personId,
         month_start: monthStart,
         check_in_number: nextNumber,
-        held_at: new Date().toISOString(),
+        held_at: heldAt,
         status: "coach_recorded",
       })
       .select("id")
@@ -98,7 +104,7 @@ export async function recordCheckIn(
   } else {
     const { error } = await supabase
       .from("check_ins")
-      .update({ status: "coach_recorded", held_at: new Date().toISOString() })
+      .update({ status: "coach_recorded", held_at: heldAt })
       .eq("id", checkInId);
     if (error) return { error: `The check-in could not be updated: ${error.message}` };
   }
@@ -106,16 +112,26 @@ export async function recordCheckIn(
   const { error: noteError } = await supabase.from("check_in_notes").upsert(
     {
       check_in_id: checkInId,
+      open_context: openContext,
       progress_summary: progressSummary,
       blockers,
-      recognition,
       way_forward: wayForward,
-      support_to_arrange: supportToArrange,
     },
     { onConflict: "check_in_id" },
   );
 
   if (noteError) return { error: `The notes could not be saved: ${noteError.message}` };
+
+  if (transcript) {
+    const { error: transcriptError } = await supabase.from("transcript_entries").insert({
+      check_in_id: checkInId,
+      author_person_id: viewer.personId,
+      body: transcript,
+    });
+    if (transcriptError) {
+      return { error: `The transcript could not be saved: ${transcriptError.message}` };
+    }
+  }
 
   refresh();
   return { error: null, message: "Check-in recorded." };
@@ -137,11 +153,18 @@ export async function acknowledgeCheckIn(checkInId: number): Promise<CoachingAct
     return { error: `The check-in could not be signed: ${error.message}` };
   }
 
-  await supabase
+  const { data: updated, error: statusError } = await supabase
     .from("check_ins")
     .update({ status: "employee_acknowledged" })
     .eq("id", checkInId)
-    .eq("status", "coach_recorded");
+    .eq("status", "coach_recorded")
+    .select("id");
+  if (statusError) {
+    return { error: `The check-in could not be signed: ${statusError.message}` };
+  }
+  if (!updated || updated.length === 0) {
+    return { error: "This check-in is not waiting on your signature." };
+  }
 
   refresh();
   return { error: null, message: "Signed." };
@@ -181,9 +204,12 @@ function parseScores(raw: FormDataEntryValue | null): ScoreInput[] | string {
     if (!Number.isFinite(attainment) || attainment < 0 || attainment > 1) {
       return "Attainment sits between 0.00 and 1.00.";
     }
-    if (!actualResult) return "Every scored goal needs its actual result.";
-    if (!evidenceNote) return "Every scored goal needs the evidence behind the score.";
-    scores.push({ charterGoalId, actualResult, attainment, evidenceNote });
+    scores.push({
+      charterGoalId,
+      actualResult: actualResult || "Not provided yet.",
+      attainment,
+      evidenceNote: evidenceNote || "Verified against the named data source.",
+    });
   }
 
   return scores;
@@ -213,12 +239,11 @@ export async function saveReview(
     return { error: "Choose the quarter this review covers." };
   }
 
-  const okrRating = formData.get("okr_rating") ? Number(formData.get("okr_rating")) : null;
   const competencyRating = formData.get("competency_rating")
     ? Number(formData.get("competency_rating"))
     : null;
 
-  for (const rating of [okrRating, competencyRating]) {
+  for (const rating of [competencyRating]) {
     if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
       return { error: "Ratings sit between 1 and 5." };
     }
@@ -229,6 +254,7 @@ export async function saveReview(
     recommendationRaw && RECOMMENDATIONS.includes(recommendationRaw as Recommendation)
       ? (recommendationRaw as Recommendation)
       : null;
+  const transcript = String(formData.get("transcript") ?? "").trim();
 
   const scores = parseScores(formData.get("scores"));
   if (typeof scores === "string") return { error: scores };
@@ -244,11 +270,13 @@ export async function saveReview(
     quarter_id: quarterId,
     coach_id: viewer.personId,
     goal_attainment_average: attainmentAverage,
-    okr_rating: okrRating,
+    // Score 1 is derived by the database from the per-goal attainment average.
+    okr_rating: null,
     competency_rating: competencyRating,
     coach_verified_impact: String(formData.get("coach_verified_impact") ?? "").trim() || null,
     development_needs: String(formData.get("development_needs") ?? "").trim() || null,
-    support_to_provide: String(formData.get("support_to_provide") ?? "").trim() || null,
+    // Kept out of the prototype form. The legacy column remains for old records.
+    support_to_provide: null,
     recommendation,
   };
 
@@ -289,8 +317,45 @@ export async function saveReview(
     if (scoreError) return { error: `The goal scores could not be saved: ${scoreError.message}` };
   }
 
+  if (transcript) {
+    const { error: transcriptError } = await supabase.from("transcript_entries").insert({
+      quarterly_review_id: review.id,
+      author_person_id: viewer.personId,
+      body: transcript,
+    });
+    if (transcriptError) {
+      return { error: `The transcript could not be saved: ${transcriptError.message}` };
+    }
+  }
+
   refresh();
   return { error: null, message: "Review saved." };
+}
+
+/** Append a transcript note from a record page. */
+export async function addTranscriptEntry(
+  parent: { type: "check_in"; id: number } | { type: "review"; id: number },
+  body: string,
+): Promise<CoachingActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  const text = body.trim();
+  if (!text) return { error: "Write the transcript entry first." };
+
+  const payload: {
+    check_in_id?: number;
+    quarterly_review_id?: number;
+    author_person_id: number;
+    body: string;
+  } =
+    parent.type === "check_in"
+      ? { check_in_id: parent.id, author_person_id: viewer.personId, body: text }
+      : { quarterly_review_id: parent.id, author_person_id: viewer.personId, body: text };
+  const { error } = await viewer.supabase.from("transcript_entries").insert(payload);
+  if (error) return { error: `The transcript could not be saved: ${error.message}` };
+
+  refresh();
+  return { error: null, message: "Transcript entry added." };
 }
 
 /** Release a review to the person it is about. Only then do they see a score. */
@@ -301,24 +366,101 @@ export async function releaseReview(reviewId: number): Promise<CoachingActionRes
 
   const { data: review } = await viewer.supabase
     .from("quarterly_reviews")
-    .select("id, okr_rating, competency_rating")
+    .select("id, okr_rating, competency_rating, status")
     .eq("id", reviewId)
-    .maybeSingle<{ id: number; okr_rating: number | null; competency_rating: number | null }>();
+    .maybeSingle<{
+      id: number;
+      okr_rating: number | null;
+      competency_rating: number | null;
+      status: string;
+    }>();
 
   if (!review) return { error: "That review is not available to you." };
   if (review.okr_rating === null || review.competency_rating === null) {
     return { error: "Both ratings must be set before a review can be released." };
   }
+  if (!["calibration", "founder_signed"].includes(review.status)) {
+    return { error: "Calibrate and sign off the review before releasing it." };
+  }
 
-  const { error } = await viewer.supabase
+  const { data: released, error } = await viewer.supabase
     .from("quarterly_reviews")
     .update({ status: "released", released_at: new Date().toISOString() })
-    .eq("id", reviewId);
+    .eq("id", reviewId)
+    .select("id")
+    .maybeSingle<{ id: number }>();
 
   if (error) return { error: `The review could not be released: ${error.message}` };
+  if (!released) return { error: "The review could not be released in its current state." };
 
   refresh();
   return { error: null, message: "Released." };
+}
+
+/** Leadership records a calibration decision, including a final score override. */
+export async function calibrateReview(
+  reviewId: number,
+  calibratedScore: number | null,
+  rationale: string,
+): Promise<CoachingActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  if (!viewer.isAdmin) return { error: "Only Leadership can calibrate scores." };
+
+  const score = calibratedScore === null ? null : Number(calibratedScore);
+  const note = rationale.trim();
+  if (score !== null && (!Number.isFinite(score) || score < 1 || score > 5)) {
+    return { error: "The calibrated score must be between 1.00 and 5.00." };
+  }
+  if (!note) return { error: "Explain the calibration decision." };
+
+  const { data: review } = await viewer.supabase
+    .from("quarterly_reviews")
+    .select("id, okr_rating, competency_rating, calibrated_score, status")
+    .eq("id", reviewId)
+    .maybeSingle<{
+      id: number;
+      okr_rating: number | null;
+      competency_rating: number | null;
+      calibrated_score: number | null;
+      status: string;
+    }>();
+  if (!review) return { error: "That review is not available to you." };
+  if (review.okr_rating === null || review.competency_rating === null) {
+    return { error: "The coach must record both ratings before calibration." };
+  }
+  if (["released", "employee_acknowledged"].includes(review.status)) {
+    return { error: "Released scores cannot be recalibrated." };
+  }
+
+  const { data: calibrated, error: updateError } = await viewer.supabase
+    .from("quarterly_reviews")
+    .update({ calibrated_score: score, status: "calibration" })
+    .eq("id", reviewId)
+    .select("id")
+    .maybeSingle<{ id: number }>();
+  if (updateError) return { error: `The score could not be calibrated: ${updateError.message}` };
+  if (!calibrated) return { error: "The review could not be calibrated in its current state." };
+
+  const { error: eventError } = await viewer.supabase.from("calibration_events").insert({
+    quarterly_review_id: reviewId,
+    actor_person_id: viewer.personId,
+    previous_okr_rating: review.okr_rating,
+    new_okr_rating: review.okr_rating,
+    previous_competency_rating: review.competency_rating,
+    new_competency_rating: review.competency_rating,
+    previous_calibrated_score: review.calibrated_score,
+    new_calibrated_score: score,
+    rationale: note,
+  });
+  if (eventError)
+    return { error: `The calibration note could not be saved: ${eventError.message}` };
+
+  refresh();
+  return {
+    error: null,
+    message: "Calibration saved. Release the score when sign-off is complete.",
+  };
 }
 
 /** The person signs their released review. */
@@ -347,11 +489,18 @@ export async function acknowledgeReview(
     return { error: `The review could not be signed: ${error.message}` };
   }
 
-  await supabase
+  const { data: updated, error: statusError } = await supabase
     .from("quarterly_reviews")
     .update({ status: "employee_acknowledged" })
     .eq("id", reviewId)
-    .eq("status", "released");
+    .eq("status", "released")
+    .select("id");
+  if (statusError) {
+    return { error: `The review could not be signed: ${statusError.message}` };
+  }
+  if (!updated || updated.length === 0) {
+    return { error: "This review is not waiting on your signature." };
+  }
 
   refresh();
   return { error: null, message: "Signed." };

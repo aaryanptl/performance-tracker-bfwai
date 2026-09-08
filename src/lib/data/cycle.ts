@@ -24,6 +24,8 @@ interface QuarterRow {
   name: string;
   start_date: string;
   end_date: string;
+  scoring_due_at: string | null;
+  is_full_review: boolean;
   status: string;
 }
 
@@ -34,34 +36,16 @@ function toQuarter(row: QuarterRow): QuarterSummary {
     name: row.name,
     startDate: row.start_date,
     endDate: row.end_date,
+    scoringDueAt: row.scoring_due_at,
+    isFullReview: row.is_full_review,
     status: row.status,
   };
 }
 
-/**
- * The cycle the workspace is currently working in: the newest one that is not
- * closed, falling back to the newest of any status so a closed programme still
- * renders its history instead of an empty app.
- */
-export async function getActiveCycle(supabase: SupabaseClient): Promise<CycleSummary | null> {
-  const { data } = await supabase
-    .from("cycles")
-    .select(
-      "id, name, start_date, end_date, goal_window_start, goal_window_end, okr_weight, competency_weight, max_goals, status",
-    )
-    .order("start_date", { ascending: false })
-    .returns<CycleRow[]>();
+const CYCLE_SELECT =
+  "id, name, start_date, end_date, goal_window_start, goal_window_end, okr_weight, competency_weight, max_goals, status";
 
-  if (!data || data.length === 0) return null;
-  const row = data.find((candidate) => candidate.status !== "closed") ?? data[0];
-
-  const { data: quarters } = await supabase
-    .from("quarters")
-    .select("id, sequence, name, start_date, end_date, status")
-    .eq("cycle_id", row.id)
-    .order("sequence")
-    .returns<QuarterRow[]>();
-
+function toCycle(row: CycleRow, quarters: QuarterRow[]): CycleSummary {
   return {
     id: row.id,
     name: row.name,
@@ -73,8 +57,55 @@ export async function getActiveCycle(supabase: SupabaseClient): Promise<CycleSum
     competencyWeight: Number(row.competency_weight),
     maxGoals: row.max_goals,
     status: row.status,
-    quarters: (quarters ?? []).map(toQuarter),
+    quarters: quarters.map(toQuarter),
   };
+}
+
+function chooseCurrent(cycles: CycleSummary[]) {
+  return (
+    cycles.find((cycle) => cycle.status === "active") ??
+    cycles.find((cycle) => cycle.status !== "closed") ??
+    cycles[0] ??
+    null
+  );
+}
+
+/** All cycles, newest first, for programme management. */
+export async function getCycles(supabase: SupabaseClient): Promise<CycleSummary[]> {
+  const { data } = await supabase
+    .from("cycles")
+    .select(CYCLE_SELECT)
+    .order("start_date", { ascending: false })
+    .returns<CycleRow[]>();
+  if (!data || data.length === 0) return [];
+
+  const quartersByCycle = new Map<number, QuarterRow[]>();
+  const { data: quarters } = await supabase
+    .from("quarters")
+    .select(
+      "id, cycle_id, sequence, name, start_date, end_date, scoring_due_at, is_full_review, status",
+    )
+    .in(
+      "cycle_id",
+      data.map((row) => row.id),
+    )
+    .order("sequence")
+    .returns<(QuarterRow & { cycle_id: number })[]>();
+  for (const quarter of quarters ?? []) {
+    const list = quartersByCycle.get(quarter.cycle_id) ?? [];
+    list.push(quarter);
+    quartersByCycle.set(quarter.cycle_id, list);
+  }
+  return data.map((row) => toCycle(row, quartersByCycle.get(row.id) ?? []));
+}
+
+/**
+ * The cycle the workspace is currently working in: the newest one that is not
+ * closed, falling back to the newest of any status so a closed programme still
+ * renders its history instead of an empty app.
+ */
+export async function getActiveCycle(supabase: SupabaseClient): Promise<CycleSummary | null> {
+  return chooseCurrent(await getCycles(supabase));
 }
 
 interface ParticipantRow {

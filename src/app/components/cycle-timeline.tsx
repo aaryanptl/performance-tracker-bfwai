@@ -1,19 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CycleSummary } from "@/lib/data/performance-types";
-import { cn } from "@/lib/utils";
-
-const DAY = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-function formatDay(iso: string) {
-  const date = new Date(`${iso}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? iso : DAY.format(date);
-}
+import { cn, formatDate } from "@/lib/utils";
 
 interface Stage {
   id: string;
@@ -35,7 +23,7 @@ function stagesFor(cycle: CycleSummary, today: string): Stage[] {
   return [
     {
       id: "goal-setting",
-      title: `Goal setting · ${formatDay(cycle.goalWindowStart)} – ${formatDay(cycle.goalWindowEnd)}`,
+      title: `Goal setting · ${formatDate(cycle.goalWindowStart)} – ${formatDate(cycle.goalWindowEnd)}`,
       detail:
         "You draft → coach reviews → Leadership approves. The approved sheet is your charter for the cycle.",
       state: today <= cycle.goalWindowEnd ? "open" : "later",
@@ -49,11 +37,10 @@ function stagesFor(cycle: CycleSummary, today: string): Stage[] {
     },
     ...cycle.quarters.map((quarter) => ({
       id: `quarter-${quarter.id}`,
-      title: `${quarter.name} · scoring by ${formatDay(quarter.endDate)}`,
-      detail:
-        quarter.sequence === cycle.quarters.length
-          ? `${weights} Half-yearly review and feedback session happens here.`
-          : weights,
+      title: `${quarter.name} · scoring by ${formatDate(quarter.scoringDueAt ?? quarter.endDate)}`,
+      detail: quarter.isFullReview
+        ? `${weights} Half-yearly review and feedback session happens here.`
+        : weights,
       state: (today >= quarter.startDate && today <= quarter.endDate ? "open" : "later") as
         | "open"
         | "later",

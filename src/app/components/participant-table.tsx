@@ -24,11 +24,15 @@ export function ParticipantTable({
   participants,
   action,
   emptyMessage,
+  summaries,
+  periods,
 }: {
   participants: ParticipantSummary[];
   /** Which workflow the row's button opens. */
-  action: "check-in" | "review" | "record";
+  action: "check-in" | "review" | "record" | "coachee";
   emptyMessage: string;
+  summaries?: Record<number, ParticipantTableSummary>;
+  periods?: { id: number; name: string }[];
 }) {
   if (participants.length === 0) {
     return (
@@ -39,14 +43,22 @@ export function ParticipantTable({
   }
 
   const label =
-    action === "check-in" ? "Record check-in" : action === "review" ? "Score" : "Open record";
+    action === "check-in"
+      ? "Record check-in"
+      : action === "review"
+        ? "Score"
+        : action === "coachee"
+          ? "Open"
+          : "Read";
 
   const hrefFor = (participant: ParticipantSummary) =>
     action === "check-in"
       ? `/coaching/check-ins/${participant.id}`
       : action === "review"
         ? `/coaching/reviews/${participant.id}`
-        : `/records/${participant.id}`;
+        : action === "coachee"
+          ? `/coaching/coachees/${participant.id}`
+          : `/records/${participant.id}`;
 
   return (
     <Card>
@@ -60,6 +72,13 @@ export function ParticipantTable({
                 <TableHead>Unit</TableHead>
                 <TableHead>Level</TableHead>
                 <TableHead>Coach</TableHead>
+                {summaries ? <TableHead>Charter</TableHead> : null}
+                {summaries ? <TableHead>Check-ins</TableHead> : null}
+                {summaries
+                  ? periods?.map((period) => <TableHead key={period.id}>{period.name}</TableHead>)
+                  : null}
+                {summaries ? <TableHead>Impact</TableHead> : null}
+                {summaries ? <TableHead>Score</TableHead> : null}
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -75,15 +94,74 @@ export function ParticipantTable({
                   <TableCell className="text-muted-foreground">
                     {participant.coachName ?? "—"}
                   </TableCell>
+                  {summaries ? (
+                    <TableCell>
+                      {summaries[participant.id]?.charterStatus ??
+                        `${summaries[participant.id]?.goalCount ?? 0} goals`}
+                    </TableCell>
+                  ) : null}
+                  {summaries ? (
+                    <TableCell className="tabular-nums">
+                      {summaries[participant.id]?.checkInCount ?? 0}/
+                      {summaries[participant.id]?.checkInTarget ?? 6}
+                    </TableCell>
+                  ) : null}
+                  {summaries
+                    ? periods?.map((period) => {
+                        const score = summaries[participant.id]?.quarterScores?.[period.id];
+                        return (
+                          <TableCell key={period.id} className="font-medium tabular-nums">
+                            {score === undefined || score === null ? "—" : score.toFixed(2)}
+                          </TableCell>
+                        );
+                      })
+                    : null}
+                  {summaries ? (
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {periods?.length
+                          ? periods.map((period) => (
+                              <Badge
+                                key={period.id}
+                                variant={
+                                  summaries[participant.id]?.impactPeriods?.[period.id]
+                                    ? "default"
+                                    : "outline"
+                                }
+                              >
+                                {period.name}
+                              </Badge>
+                            ))
+                          : (summaries[participant.id]?.impactCount ?? 0)}
+                      </div>
+                    </TableCell>
+                  ) : null}
+                  {summaries ? (
+                    <TableCell className="font-medium tabular-nums">
+                      {summaries[participant.id]?.latestScore?.toFixed(2) ?? "—"}
+                    </TableCell>
+                  ) : null}
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      nativeButton={false}
-                      render={<Link href={hrefFor(participant)} />}
-                    >
-                      {label}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        nativeButton={false}
+                        render={<Link href={hrefFor(participant)} />}
+                      >
+                        {label}
+                      </Button>
+                      {action === "record" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          nativeButton={false}
+                          render={<Link href={`/book/${participant.id}`} target="_blank" />}
+                        >
+                          Download
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -93,4 +171,15 @@ export function ParticipantTable({
       </CardContent>
     </Card>
   );
+}
+
+export interface ParticipantTableSummary {
+  goalCount: number;
+  impactCount: number;
+  latestScore: number | null;
+  charterStatus?: string;
+  checkInCount?: number;
+  checkInTarget?: number;
+  quarterScores?: Record<number, number | null>;
+  impactPeriods?: Record<number, boolean>;
 }

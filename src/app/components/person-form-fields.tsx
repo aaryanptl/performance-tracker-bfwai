@@ -2,7 +2,13 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LEVELS } from "@/data/performance";
 import {
   AUTHORITY_LABELS,
@@ -64,69 +70,74 @@ export function PersonFormFields({
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-unit`}>Unit</Label>
-        <NativeSelect
+        <Select
           className="w-full"
           defaultValue={person?.unitId ? String(person.unitId) : ""}
-          id={`${idPrefix}-unit`}
           name="unitId"
           required
         >
-          <NativeSelectOption value="" disabled>
-            Choose a unit
-          </NativeSelectOption>
-          {units.map((unit) => (
-            <NativeSelectOption key={unit.id} value={String(unit.id)}>
-              {unit.name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={`${idPrefix}-unit`}>
+            <SelectValue placeholder="Choose a unit" />
+          </SelectTrigger>
+          <SelectContent>
+            {units.map((unit) => (
+              <SelectItem key={unit.id} value={String(unit.id)}>
+                {unit.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-level`}>Year-at-level</Label>
-          <NativeSelect
-            className="w-full"
-            defaultValue={String(person?.level ?? 1)}
-            id={`${idPrefix}-level`}
-            name="level"
-          >
-            {levelValues.map((value) => (
-              <NativeSelectOption key={value} value={String(value)}>
-                Level {value}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          <Select className="w-full" defaultValue={String(person?.level ?? 1)} name="level">
+            <SelectTrigger id={`${idPrefix}-level`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {levelValues.map((value) => (
+                <SelectItem key={value} value={String(value)}>
+                  Level {value}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-employment`}>Employment type</Label>
-          <NativeSelect
+          <Select
             className="w-full"
             defaultValue={person?.employment ?? "full_time"}
-            id={`${idPrefix}-employment`}
             name="employment"
           >
-            {EMPLOYMENT_TYPES.map((value) => (
-              <NativeSelectOption key={value} value={value}>
-                {EMPLOYMENT_LABELS[value]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id={`${idPrefix}-employment`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EMPLOYMENT_TYPES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {EMPLOYMENT_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-authority`}>Authority</Label>
-        <NativeSelect
-          className="w-full"
-          defaultValue={person?.authority ?? "member"}
-          id={`${idPrefix}-authority`}
-          name="authority"
-        >
-          {AUTHORITY_ROLES.map((value) => (
-            <NativeSelectOption key={value} value={value}>
-              {AUTHORITY_LABELS[value]}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        <Select className="w-full" defaultValue={person?.authority ?? "member"} name="authority">
+          <SelectTrigger id={`${idPrefix}-authority`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {AUTHORITY_ROLES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {AUTHORITY_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <p className="text-xs text-muted-foreground">
           Founder and People &amp; HR carry administrator access. The coach role is not set here —
           it follows from having coachees.

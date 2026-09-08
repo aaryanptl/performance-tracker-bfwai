@@ -9,7 +9,13 @@ import { BrandLogo } from "@/app/components/brand-logo";
 import { signOut } from "@/app/signin/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -219,13 +225,17 @@ function WorkspaceHeader({ cycle }: { cycle: CycleSummary | null }) {
         {cycle ? cycle.status.replace(/_/g, " ") : "no cycle"}
       </Badge>
       {cycle ? (
-        <NativeSelect
-          aria-label="Active cycle"
+        <Select
           defaultValue={String(cycle.id)}
           className="hidden w-48 md:block"
         >
-          <NativeSelectOption value={String(cycle.id)}>{cycle.name}</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger aria-label="Active cycle">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={String(cycle.id)}>{cycle.name}</SelectItem>
+          </SelectContent>
+        </Select>
       ) : null}
     </header>
   );

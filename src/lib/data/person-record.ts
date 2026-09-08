@@ -1,6 +1,12 @@
 import { getActiveCycle, getParticipantById, getVisibleParticipants } from "@/lib/data/cycle";
 import type { PersonRecord } from "@/lib/data/performance-types";
-import { getCharter, getCheckIns, getImpactStatements, getReviews } from "@/lib/data/records";
+import {
+  getCharter,
+  getCheckIns,
+  getDevelopmentActions,
+  getImpactStatements,
+  getReviews,
+} from "@/lib/data/records";
 import type { SupabaseClient } from "@/lib/data/viewer";
 
 /**
@@ -21,14 +27,15 @@ export async function getPersonRecord(
   const cycle = await getActiveCycle(supabase);
   if (!cycle) return null;
 
-  const [charter, checkIns, impactStatements, reviews] = await Promise.all([
+  const [charter, checkIns, impactStatements, reviews, developmentActions] = await Promise.all([
     getCharter(supabase, participantId),
     getCheckIns(supabase, participantId),
     getImpactStatements(supabase, participantId),
     getReviews(supabase, participantId),
+    getDevelopmentActions(supabase, participantId),
   ]);
 
-  return { participant, cycle, charter, checkIns, impactStatements, reviews };
+  return { participant, cycle, charter, checkIns, impactStatements, reviews, developmentActions };
 }
 
 /**
@@ -42,13 +49,22 @@ export async function getVisibleRecords(supabase: SupabaseClient): Promise<Perso
   const participants = await getVisibleParticipants(supabase, cycle.id);
   const records = await Promise.all(
     participants.map(async (participant) => {
-      const [charter, checkIns, impactStatements, reviews] = await Promise.all([
+      const [charter, checkIns, impactStatements, reviews, developmentActions] = await Promise.all([
         getCharter(supabase, participant.id),
         getCheckIns(supabase, participant.id),
         getImpactStatements(supabase, participant.id),
         getReviews(supabase, participant.id),
+        getDevelopmentActions(supabase, participant.id),
       ]);
-      return { participant, cycle, charter, checkIns, impactStatements, reviews };
+      return {
+        participant,
+        cycle,
+        charter,
+        checkIns,
+        impactStatements,
+        reviews,
+        developmentActions,
+      };
     }),
   );
 

@@ -70,6 +70,13 @@ export function ExportActions({
         <Download />
         Scores
       </Button>
+      <Button
+        variant="outline"
+        onClick={() => download("ascend-transcript.csv", files.transcript, "text/csv")}
+      >
+        <Download />
+        Transcript
+      </Button>
       {canDownloadAll ? (
         <Button
           variant="outline"

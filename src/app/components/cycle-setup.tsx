@@ -1,6 +1,7 @@
 "use client";
 
 import { LibraryBig, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 
 import {
@@ -47,7 +48,12 @@ function Result({ state }: { state: CycleActionResult }) {
  * competency.
  */
 export function SeedLibraryCard({ loaded }: { loaded: number }) {
-  const [state, action, pending] = useActionState(async () => seedCompetencyLibrary(), IDLE);
+  const router = useRouter();
+  const [state, action, pending] = useActionState(async () => {
+    const result = await seedCompetencyLibrary();
+    if (!result.error) router.refresh();
+    return result;
+  }, IDLE);
 
   return (
     <form action={action}>
@@ -86,7 +92,15 @@ function shift(iso: string, { days = 0, months = 0 }: { days?: number; months?: 
 }
 
 export function OpenCycleCard() {
-  const [state, action, pending] = useActionState(openCycle, IDLE);
+  const router = useRouter();
+  const [state, action, pending] = useActionState(
+    async (previous: CycleActionResult, formData: FormData) => {
+      const result = await openCycle(previous, formData);
+      if (!result.error) router.refresh();
+      return result;
+    },
+    IDLE,
+  );
 
   /*
    * All four dates are controlled. They used to be uncontrolled, which meant a
@@ -119,10 +133,11 @@ export function OpenCycleCard() {
     <form action={action}>
       <Card>
         <CardHeader>
-          <CardTitle>Open a cycle</CardTitle>
+          <CardTitle>Add the next cycle</CardTitle>
           <CardDescription>
-            A cycle is six months. Opening one creates its two quarters and enrols every active
-            person, snapshotting their title, level and coach as they stand today.
+            A cycle is six months: goal setting once at the front, monthly check-ins throughout,
+            scoring at each quarter end, and the full review at the close. Adding one creates its
+            two quarters and enrols every active person.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -186,7 +201,7 @@ export function OpenCycleCard() {
         <CardFooter className="border-t">
           <Button type="submit" disabled={pending}>
             <Play />
-            {pending ? "Opening…" : "Open cycle and enrol the roster"}
+            {pending ? "Adding…" : "Add the next cycle"}
           </Button>
         </CardFooter>
       </Card>

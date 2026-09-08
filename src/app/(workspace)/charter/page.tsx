@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
 import { CHARTER_STATUS_LABELS } from "@/lib/data/performance-types";
-import { getCharter } from "@/lib/data/records";
+import { getCharter, getReviews } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
 
 export default async function CharterPage() {
@@ -56,7 +56,10 @@ export default async function CharterPage() {
     );
   }
 
-  const charter = await getCharter(viewer.supabase, participant.id);
+  const [charter, reviews] = await Promise.all([
+    getCharter(viewer.supabase, participant.id),
+    getReviews(viewer.supabase, participant.id),
+  ]);
   const step =
     charter === null || charter.status === "draft"
       ? 1
@@ -118,6 +121,11 @@ export default async function CharterPage() {
                       <TableHead>Baseline</TableHead>
                       <TableHead>Target</TableHead>
                       <TableHead>Data source</TableHead>
+                      {charter.status === "approved_locked"
+                        ? cycle.quarters.map((quarter) => (
+                            <TableHead key={quarter.id}>{quarter.name} actuals / score</TableHead>
+                          ))
+                        : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -128,6 +136,24 @@ export default async function CharterPage() {
                         <TableCell>{goal.baseline}</TableCell>
                         <TableCell>{goal.target}</TableCell>
                         <TableCell className="text-muted-foreground">{goal.dataSource}</TableCell>
+                        {charter.status === "approved_locked"
+                          ? cycle.quarters.map((quarter) => {
+                              const score = reviews
+                                .find((review) => review.quarterId === quarter.id)
+                                ?.goalScores.find((entry) => entry.charterGoalId === goal.id);
+                              return (
+                                <TableCell key={quarter.id} className="min-w-48 align-top">
+                                  <p className="text-xs text-muted-foreground">
+                                    {quarter.name} — what you actually achieved
+                                  </p>
+                                  <p>{score?.actualResult || "—"}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Coach score: {score?.attainment.toFixed(2) ?? "not scored yet"}
+                                  </p>
+                                </TableCell>
+                              );
+                            })
+                          : null}
                       </TableRow>
                     ))}
                   </TableBody>

@@ -1,9 +1,15 @@
 "use client";
 
-import { Pencil, Search, TriangleAlert } from "lucide-react";
+import { Mail, Pencil, Search, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { assignCoach, type RosterActionResult } from "@/app/(workspace)/admin/people/actions";
+import {
+  assignCoach,
+  assignLeader,
+  invitePerson,
+  type RosterActionResult,
+} from "@/app/(workspace)/admin/people/actions";
 import { AddPersonDialog } from "@/app/components/add-person-dialog";
 import { PersonEditSheet } from "@/app/components/person-edit-sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,7 +18,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -37,8 +49,10 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [coachDrafts, setCoachDrafts] = useState<Record<number, string>>({});
+  const [leaderDrafts, setLeaderDrafts] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const coachOptions = useMemo(
     () =>
@@ -48,6 +62,7 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [people],
   );
+  const leaderOptions = coachOptions;
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -76,6 +91,38 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
         return next;
       });
       if (result.error) setMessage(result.error);
+      else router.refresh();
+    });
+  }
+
+  function changeLeader(person: RosterPerson, value: string) {
+    setLeaderDrafts((current) => ({ ...current, [person.id]: value }));
+    setBusyId(person.id);
+    setMessage(null);
+    startTransition(async () => {
+      const result: RosterActionResult = await assignLeader(
+        person.id,
+        value ? Number(value) : null,
+      );
+      setBusyId(null);
+      setLeaderDrafts((current) => {
+        const next = { ...current };
+        delete next[person.id];
+        return next;
+      });
+      if (result.error) setMessage(result.error);
+      else router.refresh();
+    });
+  }
+
+  function invite(person: RosterPerson) {
+    setBusyId(person.id);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await invitePerson(person.id);
+      setBusyId(null);
+      if (result.error) setMessage(result.error);
+      else router.refresh();
     });
   }
 
@@ -118,6 +165,7 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                 <TableHead>Position</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead>Level</TableHead>
+                <TableHead className="min-w-44">Team leader</TableHead>
                 <TableHead className="min-w-44">Coach</TableHead>
                 <TableHead className="text-right">Coachees</TableHead>
                 <TableHead>Status</TableHead>
@@ -152,23 +200,48 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                     </p>
                   </TableCell>
                   <TableCell>
-                    <NativeSelect
-                      aria-label={`Coach of ${person.name}`}
+                    <Select
                       className="w-full"
                       disabled={busyId === person.id}
-                      onChange={(event) => changeCoach(person, event.target.value)}
-                      size="sm"
+                      onValueChange={(value) => changeLeader(person, value ?? "")}
+                      value={leaderDrafts[person.id] ?? String(person.leaderId ?? "")}
+                    >
+                      <SelectTrigger aria-label={`Team leader of ${person.name}`} size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No team leader</SelectItem>
+                        {leaderOptions
+                          .filter((leader) => leader.id !== person.id)
+                          .map((leader) => (
+                            <SelectItem key={leader.id} value={String(leader.id)}>
+                              {leader.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      className="w-full"
+                      disabled={busyId === person.id}
+                      onValueChange={(value) => changeCoach(person, value ?? "")}
                       value={coachDrafts[person.id] ?? String(person.coachId ?? "")}
                     >
-                      <NativeSelectOption value="">No coach</NativeSelectOption>
-                      {coachOptions
-                        .filter((coach) => coach.id !== person.id)
-                        .map((coach) => (
-                          <NativeSelectOption key={coach.id} value={String(coach.id)}>
-                            {coach.name}
-                          </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
+                      <SelectTrigger aria-label={`Coach of ${person.name}`} size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No coach</SelectItem>
+                        {coachOptions
+                          .filter((coach) => coach.id !== person.id)
+                          .map((coach) => (
+                            <SelectItem key={coach.id} value={String(coach.id)}>
+                              {coach.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{person.coacheeCount}</TableCell>
                   <TableCell>
@@ -176,9 +249,15 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                       {person.active ? "Active" : "Inactive"}
                     </Badge>
                     {person.active && !person.hasAccount ? (
-                      <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">
-                        No sign-in yet
-                      </p>
+                      <Button
+                        className="mt-1"
+                        disabled={busyId === person.id}
+                        onClick={() => invite(person)}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <Mail /> Send invite
+                      </Button>
                     ) : null}
                   </TableCell>
                   <TableCell className="text-right">
@@ -195,7 +274,7 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
               ))}
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={8}>
+                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={9}>
                     No one on the roster matches that search.
                   </TableCell>
                 </TableRow>
@@ -207,8 +286,9 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
 
       <p className="text-sm text-muted-foreground">
         The coach column saves as soon as you choose, because it is the access boundary: a new
-        coaching line opens and the old one closes. Everything else about a person — name, email,
-        position, unit, level, employment and authority — is edited in one panel behind{" "}
+        coaching line opens and the old one closes. Team leader is saved against the current cycle.
+        Everything else about a person — name, email, position, unit, level, employment and
+        authority — is edited in one panel behind{" "}
         <span className="font-medium text-foreground">Edit</span>.
       </p>
 

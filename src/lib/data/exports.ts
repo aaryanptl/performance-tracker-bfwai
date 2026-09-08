@@ -1,4 +1,5 @@
 import { halfYearScore, type PersonRecord } from "@/lib/data/performance-types";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 function cell(value: string | number | null | undefined) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -47,13 +48,14 @@ export function buildExports(records: PersonRecord[]) {
   ]);
 
   const checkIns = rows([
-    ["Person", "Month", "Status", "Coach", "Progress", "Blockers", "Way forward", "Signed"],
+    ["Person", "Month", "Status", "Coach", "Open", "Goals", "Reality", "Way forward", "Signed"],
     ...records.flatMap((record) =>
       record.checkIns.map((checkIn) => [
         record.participant.personName,
-        checkIn.monthStart,
+        formatDate(checkIn.monthStart),
         checkIn.status,
         checkIn.coachName ?? "",
+        checkIn.notes?.openContext ?? "",
         checkIn.notes?.progressSummary ?? "",
         checkIn.notes?.blockers ?? "",
         checkIn.notes?.wayForward ?? "",
@@ -63,7 +65,7 @@ export function buildExports(records: PersonRecord[]) {
   ]);
 
   const impact = rows([
-    ["Person", "Quarter", "Status", "Impact created", "Numbers and evidence", "Competency"],
+    ["Person", "Quarter", "Status", "Impact created", "Competency"],
     ...records.flatMap((record) =>
       record.impactStatements.flatMap((statement) =>
         statement.items.map((item) => [
@@ -71,7 +73,6 @@ export function buildExports(records: PersonRecord[]) {
           statement.quarterName ?? "",
           statement.status,
           item.impactCreated,
-          item.numbersAndEvidence,
           item.competencyDemonstrated ?? "",
         ]),
       ),
@@ -86,6 +87,7 @@ export function buildExports(records: PersonRecord[]) {
       "Score 1 (delivered)",
       "Score 2 (how)",
       "Quarterly score",
+      "Calibrated score",
       "Recommendation",
       "Status",
       "Released",
@@ -98,11 +100,48 @@ export function buildExports(records: PersonRecord[]) {
         review.okrRating,
         review.competencyRating,
         review.quarterlyScore?.toFixed(2) ?? "",
+        review.calibratedScore?.toFixed(2) ?? "",
         review.recommendation ?? "",
         review.status,
-        review.releasedAt ?? "",
+        review.releasedAt ? formatDate(review.releasedAt) : "",
       ]),
     ),
+  ]);
+
+  const transcript = rows([
+    ["Person", "Record type", "Period", "Author", "Created", "Entry"],
+    ...records.flatMap((record) => [
+      ...record.checkIns.flatMap((checkIn) =>
+        checkIn.transcript.map((entry) => [
+          record.participant.personName,
+          "check-in",
+          formatDate(checkIn.monthStart),
+          entry.authorName,
+          formatDateTime(entry.createdAt),
+          entry.body,
+        ]),
+      ),
+      ...record.impactStatements.flatMap((statement) =>
+        statement.transcript.map((entry) => [
+          record.participant.personName,
+          "impact statement",
+          statement.quarterName ?? "half year",
+          entry.authorName,
+          formatDateTime(entry.createdAt),
+          entry.body,
+        ]),
+      ),
+      ...record.reviews.flatMap((review) =>
+        review.transcript.map((entry) => [
+          record.participant.personName,
+          "quarterly review",
+          review.quarterName,
+          entry.authorName,
+          formatDateTime(entry.createdAt),
+          entry.body,
+        ]),
+      ),
+    ]),
   ]);
 
   return {
@@ -111,6 +150,7 @@ export function buildExports(records: PersonRecord[]) {
     checkIns,
     impact,
     scores,
+    transcript,
     backup: JSON.stringify({ generatedAt: new Date().toISOString(), records }, null, 2),
   };
 }

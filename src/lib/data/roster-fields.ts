@@ -45,6 +45,7 @@ export interface RosterPerson {
   /** True once an auth account is linked, which is what lets the person sign in. */
   hasAccount: boolean;
   coachId: number | null;
+  leaderId: number | null;
   coacheeCount: number;
   role: RosterRole;
 }

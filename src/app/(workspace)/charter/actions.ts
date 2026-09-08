@@ -282,8 +282,18 @@ export async function decideCharter(
         ? { status: "coach_reviewed", coach_reviewed_at: now }
         : { status: "approved_locked", founder_approved_at: now, locked_at: now };
 
-  const { error } = await supabase.from("goal_charters").update(patch).eq("id", charterId);
+  // Row-level security filters rather than refuses, so an update the caller may
+  // not make comes back as zero rows, not an error. Ask for the row back to
+  // tell the two apart.
+  const { data: updated, error } = await supabase
+    .from("goal_charters")
+    .update(patch)
+    .eq("id", charterId)
+    .select("id");
   if (error) return { error: `The decision could not be recorded: ${error.message}` };
+  if (!updated || updated.length === 0) {
+    return { error: "You are not allowed to decide on this charter." };
+  }
 
   const { error: decisionError } = await supabase.from("charter_decisions").insert({
     charter_id: charterId,

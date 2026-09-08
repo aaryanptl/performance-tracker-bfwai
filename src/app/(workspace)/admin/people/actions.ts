@@ -9,6 +9,7 @@ import {
   type EmploymentType,
   isAdminAuthority,
 } from "@/lib/data/roster-fields";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export interface RosterActionResult {
@@ -201,6 +202,49 @@ export async function assignCoach(
   return OK;
 }
 
+/** Update the team leader recorded for this person's active cycle. */
+export async function assignLeader(
+  personId: number,
+  leaderId: number | null,
+): Promise<RosterActionResult> {
+  const context = await adminContext();
+  if (!isContext(context)) return context;
+  const { supabase } = context;
+
+  if (leaderId !== null && leaderId === personId) {
+    return { error: "A person cannot be their own team leader." };
+  }
+
+  const { data: cycle, error: cycleError } = await supabase
+    .from("cycles")
+    .select("id")
+    .eq("status", "active")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number }>();
+  if (cycleError || !cycle) {
+    return { error: "Create or activate a cycle before assigning team leaders." };
+  }
+
+  const { data: updated, error } = await supabase
+    .from("cycle_participants")
+    .update({ leader_id: leaderId })
+    .eq("cycle_id", cycle.id)
+    .eq("person_id", personId)
+    .select("id")
+    .maybeSingle<{ id: number }>();
+  if (error) {
+    console.error("[roster] Team leader update failed:", error.message);
+    return { error: "The team leader could not be saved for the current cycle." };
+  }
+  if (!updated) {
+    return { error: "This person is not enrolled in the current cycle." };
+  }
+
+  refresh();
+  return OK;
+}
+
 /**
  * People are deactivated rather than deleted: check-ins, charters and scores
  * reference the row, and the schema restricts deletes for that reason.
@@ -238,6 +282,53 @@ export async function setPersonActive(
 
   refresh();
   return OK;
+}
+
+/** Send a Supabase invite to a roster member who has no linked account. */
+export async function invitePerson(personId: number): Promise<RosterActionResult> {
+  const context = await adminContext();
+  if (!isContext(context)) return context;
+  const { supabase } = context;
+
+  const { data: person, error: personError } = await supabase
+    .from("people")
+    .select("id, display_name, work_email, auth_user_id, active")
+    .eq("id", personId)
+    .maybeSingle<{
+      id: number;
+      display_name: string;
+      work_email: string;
+      auth_user_id: string | null;
+      active: boolean;
+    }>();
+  if (personError || !person) return { error: "That roster member could not be found." };
+  if (!person.active)
+    return { error: "Invite the person only after restoring their roster access." };
+  if (person.auth_user_id) return { error: "This person already has a sign-in account." };
+
+  const admin = createAdminClient();
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+    person.work_email.trim().toLowerCase(),
+    {
+      data: { display_name: person.display_name },
+      redirectTo: process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/signin`
+        : undefined,
+    },
+  );
+  if (inviteError || !invited.user) {
+    return { error: `The invite could not be sent: ${inviteError?.message ?? "unknown error"}` };
+  }
+
+  const { error: linkError } = await supabase
+    .from("people")
+    .update({ auth_user_id: invited.user.id, invited_at: new Date().toISOString() })
+    .eq("id", personId);
+  if (linkError)
+    return { error: `The invite was sent, but the roster link failed: ${linkError.message}` };
+
+  refresh();
+  return { error: null };
 }
 
 function slugify(name: string) {

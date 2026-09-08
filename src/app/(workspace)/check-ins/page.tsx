@@ -100,8 +100,14 @@ export default async function CheckInsPage() {
 
                 {checkIn.notes ? (
                   <div className="mt-4 grid gap-3 text-sm leading-6">
+                    {checkIn.notes.openContext ? (
+                      <div>
+                        <p className="font-medium">Open</p>
+                        <p className="text-muted-foreground">{checkIn.notes.openContext}</p>
+                      </div>
+                    ) : null}
                     <div>
-                      <p className="font-medium">Progress</p>
+                      <p className="font-medium">Goals</p>
                       <p className="text-muted-foreground">{checkIn.notes.progressSummary}</p>
                     </div>
                     {checkIn.notes.blockers ? (
@@ -110,22 +116,10 @@ export default async function CheckInsPage() {
                         <p className="text-muted-foreground">{checkIn.notes.blockers}</p>
                       </div>
                     ) : null}
-                    {checkIn.notes.recognition ? (
-                      <div>
-                        <p className="font-medium">Recognition</p>
-                        <p className="text-muted-foreground">{checkIn.notes.recognition}</p>
-                      </div>
-                    ) : null}
                     <div>
                       <p className="font-medium">Way forward</p>
                       <p className="text-muted-foreground">{checkIn.notes.wayForward}</p>
                     </div>
-                    {checkIn.notes.supportToArrange ? (
-                      <div>
-                        <p className="font-medium">Support to arrange</p>
-                        <p className="text-muted-foreground">{checkIn.notes.supportToArrange}</p>
-                      </div>
-                    ) : null}
                     {!checkIn.acknowledgedByParticipant ? (
                       <div className="pt-1">
                         <AcknowledgeCheckInButton checkInId={checkIn.id} />

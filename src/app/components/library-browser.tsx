@@ -5,7 +5,13 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -66,18 +72,18 @@ export function LibraryBrowser() {
         >
           Competencies
         </Button>
-        <NativeSelect
-          aria-label="Filter by unit"
-          className="ml-auto"
-          value={unit}
-          onChange={(event) => setUnit(event.target.value)}
-        >
-          {units.map((name) => (
-            <NativeSelectOption key={name} value={name}>
-              {name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        <Select className="ml-auto" value={unit} onValueChange={(value) => setUnit(value ?? "")}>
+          <SelectTrigger aria-label="Filter by unit">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {units.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {tab === "okr" ? (

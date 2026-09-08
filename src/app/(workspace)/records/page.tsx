@@ -29,6 +29,10 @@ const CSV_EXPORTS = [
     "Goal-attainment average, Score 1, Score 2, the computed quarterly score, the recommendation and the release date.",
   ],
   [
+    "Conversation transcript",
+    "Every transcript entry attached to a check-in, impact statement, or quarterly review, with its author and timestamp.",
+  ],
+  [
     "People and coaching map",
     "One row per person: name, email, title, unit, level, coach, charter status and the half-yearly score.",
   ],
@@ -51,6 +55,40 @@ export default async function RecordsPage() {
 
   const records = await getVisibleRecords(viewer.supabase);
   const files = buildExports(records);
+  const periods = records[0]?.cycle.quarters;
+  const summaries = Object.fromEntries(
+    records.map((record) => {
+      const releasedReviews = record.reviews.filter(
+        (review) => review.releasedAt !== null && review.quarterlyScore !== null,
+      );
+      const latestReview = releasedReviews.at(-1);
+      return [
+        record.participant.id,
+        {
+          goalCount: record.charter?.goals.length ?? 0,
+          impactCount: record.impactStatements.reduce(
+            (count, statement) => count + statement.items.length,
+            0,
+          ),
+          latestScore: latestReview?.calibratedScore ?? latestReview?.quarterlyScore ?? null,
+          charterStatus: record.charter ? record.charter.status.replace(/_/g, " ") : "Not started",
+          checkInCount: record.checkIns.filter((checkIn) => checkIn.notes !== null).length,
+          checkInTarget: 6,
+          quarterScores: Object.fromEntries(
+            record.reviews.map((review) => [
+              review.quarterId,
+              review.calibratedScore ?? review.quarterlyScore,
+            ]),
+          ),
+          impactPeriods: Object.fromEntries(
+            record.impactStatements
+              .filter((statement) => statement.quarterId !== null)
+              .map((statement) => [statement.quarterId as number, statement.submittedAt !== null]),
+          ),
+        },
+      ];
+    }),
+  );
 
   return (
     <>
@@ -59,6 +97,7 @@ export default async function RecordsPage() {
         title="Records & downloads"
         description="Everything written in Ascend is downloadable: the charters, every monthly check-in, every Impact Statement and every scoring conversation — as CSV for analysis, or as a record book to read and print."
         action={<ExportActions exports={files} canDownloadAll={viewer.isAdmin} />}
+        actionBelow
       />
       <Alert className="mb-6">
         <ShieldCheck />
@@ -104,6 +143,8 @@ export default async function RecordsPage() {
       <ParticipantTable
         participants={records.map((record) => record.participant)}
         action="record"
+        periods={periods}
+        summaries={summaries}
         emptyMessage="No records are available yet. A cycle must be open and the roster enrolled."
       />
     </>

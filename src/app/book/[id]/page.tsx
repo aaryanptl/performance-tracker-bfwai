@@ -14,11 +14,7 @@ export const metadata = { title: "Performance record" };
  * row-level security, so a participant outside the caller's scope produces a
  * 404 here rather than a partial document.
  */
-export default async function PersonBookPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function PersonBookPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 

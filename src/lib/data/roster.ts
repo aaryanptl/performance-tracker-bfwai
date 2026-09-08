@@ -32,7 +32,7 @@ export async function getRoster(): Promise<Roster> {
   const { data: claims } = await supabase.auth.getClaims();
   const authUserId = claims?.claims?.sub ?? null;
 
-  const [peopleResult, unitsResult, assignmentResult] = await Promise.all([
+  const [peopleResult, unitsResult, assignmentResult, cycleResult] = await Promise.all([
     supabase
       .from("people")
       .select(
@@ -52,6 +52,13 @@ export async function getRoster(): Promise<Roster> {
       .select("coachee_id, coach_id")
       .is("effective_to", null)
       .returns<{ coachee_id: number; coach_id: number }[]>(),
+    supabase
+      .from("cycles")
+      .select("id")
+      .eq("status", "active")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: number }>(),
   ]);
 
   if (peopleResult.error) {
@@ -67,6 +74,18 @@ export async function getRoster(): Promise<Roster> {
   for (const assignment of assignmentResult.data ?? []) {
     coachOf.set(assignment.coachee_id, assignment.coach_id);
     coacheeCounts.set(assignment.coach_id, (coacheeCounts.get(assignment.coach_id) ?? 0) + 1);
+  }
+
+  const leaderOf = new Map<number, number | null>();
+  if (cycleResult.data) {
+    const { data: participants } = await supabase
+      .from("cycle_participants")
+      .select("person_id, leader_id")
+      .eq("cycle_id", cycleResult.data.id)
+      .returns<{ person_id: number; leader_id: number | null }[]>();
+    for (const participant of participants ?? []) {
+      leaderOf.set(participant.person_id, participant.leader_id);
+    }
   }
 
   const rows = peopleResult.data ?? [];
@@ -86,6 +105,7 @@ export async function getRoster(): Promise<Roster> {
       active: row.active,
       hasAccount: Boolean(row.auth_user_id),
       coachId: coachOf.get(row.id) ?? null,
+      leaderId: leaderOf.get(row.id) ?? null,
       coacheeCount,
       role: isAdminAuthority(row.authority_role) ? "admin" : coacheeCount > 0 ? "coach" : "member",
     };

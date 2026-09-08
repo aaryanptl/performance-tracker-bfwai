@@ -3,11 +3,13 @@ import type {
   CharterStatus,
   CheckInRecord,
   CheckInStatus,
+  DevelopmentAction,
   ImpactStatement,
   ImpactStatus,
   QuarterlyReview,
   Recommendation,
   ReviewStatus,
+  TranscriptEntry,
 } from "@/lib/data/performance-types";
 import type { SupabaseClient } from "@/lib/data/viewer";
 
@@ -152,13 +154,29 @@ interface CheckInRow {
   status: CheckInStatus;
   coach: { display_name: string } | null;
   notes: {
+    open_context: string | null;
     progress_summary: string;
     blockers: string | null;
-    recognition: string | null;
     way_forward: string;
-    support_to_arrange: string | null;
   } | null;
   acknowledgments: { actor_capacity: string }[] | null;
+  transcript: TranscriptRow[] | null;
+}
+
+interface TranscriptRow {
+  id: number;
+  body: string;
+  created_at: string;
+  author: { display_name: string } | null;
+}
+
+function toTranscript(rows: TranscriptRow[] | null): TranscriptEntry[] {
+  return (rows ?? []).map((row) => ({
+    id: row.id,
+    authorName: row.author?.display_name ?? "Unknown",
+    body: row.body,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function getCheckIns(
@@ -168,7 +186,7 @@ export async function getCheckIns(
   const { data } = await supabase
     .from("check_ins")
     .select(
-      "id, cycle_participant_id, month_start, check_in_number, held_at, status, coach:people!check_ins_coach_id_fkey(display_name), notes:check_in_notes(progress_summary, blockers, recognition, way_forward, support_to_arrange), acknowledgments:check_in_acknowledgments(actor_capacity)",
+      "id, cycle_participant_id, month_start, check_in_number, held_at, status, coach:people!check_ins_coach_id_fkey(display_name), notes:check_in_notes(open_context, progress_summary, blockers, way_forward), acknowledgments:check_in_acknowledgments(actor_capacity), transcript:transcript_entries!transcript_entries_check_in_id_fkey(id, body, created_at, author:people!transcript_entries_author_person_id_fkey(display_name))",
     )
     .eq("cycle_participant_id", participantId)
     .order("month_start")
@@ -184,16 +202,16 @@ export async function getCheckIns(
     coachName: row.coach?.display_name ?? null,
     notes: row.notes
       ? {
+          openContext: row.notes.open_context,
           progressSummary: row.notes.progress_summary,
           blockers: row.notes.blockers,
-          recognition: row.notes.recognition,
           wayForward: row.notes.way_forward,
-          supportToArrange: row.notes.support_to_arrange,
         }
       : null,
     acknowledgedByParticipant: (row.acknowledgments ?? []).some(
       (entry) => entry.actor_capacity === "participant",
     ),
+    transcript: toTranscript(row.transcript),
   }));
 }
 
@@ -217,6 +235,7 @@ interface ImpactRow {
   submitted_at: string | null;
   quarter: { name: string } | null;
   items: ImpactItemRow[] | null;
+  transcript: TranscriptRow[] | null;
 }
 
 export async function getImpactStatements(
@@ -226,7 +245,7 @@ export async function getImpactStatements(
   const { data } = await supabase
     .from("impact_statements")
     .select(
-      "id, cycle_participant_id, quarter_id, period_type, status, learning_carried_forward, submitted_at, quarter:quarters(name), items:impact_items(id, sort_order, impact_created, numbers_and_evidence, competency_demonstrated)",
+      "id, cycle_participant_id, quarter_id, period_type, status, learning_carried_forward, submitted_at, quarter:quarters(name), items:impact_items(id, sort_order, impact_created, numbers_and_evidence, competency_demonstrated), transcript:transcript_entries!transcript_entries_impact_statement_id_fkey(id, body, created_at, author:people!transcript_entries_author_person_id_fkey(display_name))",
     )
     .eq("cycle_participant_id", participantId)
     .returns<ImpactRow[]>();
@@ -250,6 +269,7 @@ export async function getImpactStatements(
         numbersAndEvidence: item.numbers_and_evidence,
         competencyDemonstrated: item.competency_demonstrated,
       })),
+    transcript: toTranscript(row.transcript),
   }));
 }
 
@@ -272,6 +292,7 @@ interface ReviewRow {
   okr_rating: number | null;
   competency_rating: number | null;
   quarterly_score: number | null;
+  calibrated_score: number | null;
   coach_verified_impact: string | null;
   development_needs: string | null;
   support_to_provide: string | null;
@@ -281,6 +302,30 @@ interface ReviewRow {
   quarter: { name: string; sequence: number } | null;
   coach: { display_name: string } | null;
   scores: GoalScoreRow[] | null;
+  calibration_events: CalibrationEventRow[] | null;
+  acknowledgments: ReviewAcknowledgmentRow[] | null;
+  transcript: TranscriptRow[] | null;
+}
+
+interface ReviewAcknowledgmentRow {
+  actor_capacity: "coach" | "founder" | "participant";
+  decision: "signed" | "acknowledged";
+  verbatim_comment: string | null;
+  acknowledged_at: string;
+  actor: { display_name: string } | null;
+}
+
+interface CalibrationEventRow {
+  id: number;
+  previous_okr_rating: number | null;
+  new_okr_rating: number | null;
+  previous_competency_rating: number | null;
+  new_competency_rating: number | null;
+  previous_calibrated_score: number | null;
+  new_calibrated_score: number | null;
+  rationale: string;
+  created_at: string;
+  actor: { display_name: string } | null;
 }
 
 export async function getReviews(
@@ -290,7 +335,7 @@ export async function getReviews(
   const { data } = await supabase
     .from("quarterly_reviews")
     .select(
-      "id, cycle_participant_id, quarter_id, goal_attainment_average, okr_rating, competency_rating, quarterly_score, coach_verified_impact, development_needs, support_to_provide, recommendation, status, released_at, quarter:quarters(name, sequence), coach:people!quarterly_reviews_coach_id_fkey(display_name), scores:goal_scores(id, charter_goal_id, actual_result, attainment, evidence_note, goal:charter_goals(outcome))",
+      "id, cycle_participant_id, quarter_id, goal_attainment_average, okr_rating, competency_rating, calibrated_score, quarterly_score, coach_verified_impact, development_needs, support_to_provide, recommendation, status, released_at, quarter:quarters(name, sequence), coach:people!quarterly_reviews_coach_id_fkey(display_name), scores:goal_scores(id, charter_goal_id, actual_result, attainment, evidence_note, goal:charter_goals(outcome)), calibration_events(id, previous_okr_rating, new_okr_rating, previous_competency_rating, new_competency_rating, previous_calibrated_score, new_calibrated_score, rationale, created_at, actor:people!calibration_events_actor_person_id_fkey(display_name)), acknowledgments:review_acknowledgments(actor_capacity, decision, verbatim_comment, acknowledged_at, actor:people!review_acknowledgments_actor_person_id_fkey(display_name)), transcript:transcript_entries!transcript_entries_quarterly_review_id_fkey(id, body, created_at, author:people!transcript_entries_author_person_id_fkey(display_name))",
     )
     .eq("cycle_participant_id", participantId)
     .returns<ReviewRow[]>();
@@ -308,6 +353,7 @@ export async function getReviews(
         row.goal_attainment_average === null ? null : Number(row.goal_attainment_average),
       okrRating: row.okr_rating,
       competencyRating: row.competency_rating,
+      calibratedScore: row.calibrated_score === null ? null : Number(row.calibrated_score),
       quarterlyScore: row.quarterly_score === null ? null : Number(row.quarterly_score),
       coachVerifiedImpact: row.coach_verified_impact,
       developmentNeeds: row.development_needs,
@@ -323,5 +369,57 @@ export async function getReviews(
         attainment: Number(score.attainment),
         evidenceNote: score.evidence_note,
       })),
+      calibrationEvents: (row.calibration_events ?? []).map((event) => ({
+        id: event.id,
+        actorName: event.actor?.display_name ?? "Leadership",
+        previousOkrRating: event.previous_okr_rating,
+        newOkrRating: event.new_okr_rating,
+        previousCompetencyRating: event.previous_competency_rating,
+        newCompetencyRating: event.new_competency_rating,
+        previousCalibratedScore:
+          event.previous_calibrated_score === null ? null : Number(event.previous_calibrated_score),
+        newCalibratedScore:
+          event.new_calibrated_score === null ? null : Number(event.new_calibrated_score),
+        rationale: event.rationale,
+        createdAt: event.created_at,
+      })),
+      acknowledgments: (row.acknowledgments ?? []).map((acknowledgment) => ({
+        actorName: acknowledgment.actor?.display_name ?? "Unknown",
+        capacity: acknowledgment.actor_capacity,
+        decision: acknowledgment.decision,
+        comment: acknowledgment.verbatim_comment,
+        acknowledgedAt: acknowledgment.acknowledged_at,
+      })),
+      transcript: toTranscript(row.transcript),
     }));
+}
+
+interface DevelopmentActionRow {
+  id: number;
+  action_text: string;
+  support_type: string | null;
+  due_date: string | null;
+  status: "planned" | "in_progress" | "complete" | "cancelled";
+  completed_at: string | null;
+}
+
+export async function getDevelopmentActions(
+  supabase: SupabaseClient,
+  participantId: number,
+): Promise<DevelopmentAction[]> {
+  const { data } = await supabase
+    .from("development_actions")
+    .select("id, action_text, support_type, due_date, status, completed_at")
+    .eq("cycle_participant_id", participantId)
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .returns<DevelopmentActionRow[]>();
+
+  return (data ?? []).map((action) => ({
+    id: action.id,
+    actionText: action.action_text,
+    supportType: action.support_type,
+    dueDate: action.due_date,
+    status: action.status,
+    completedAt: action.completed_at,
+  }));
 }

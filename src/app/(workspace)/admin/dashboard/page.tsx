@@ -1,9 +1,12 @@
-import { BriefcaseBusiness, CalendarCheck2, Goal, ShieldCheck } from "lucide-react";
+import { CalendarCheck2, ClipboardCheck, Goal, ShieldCheck, Trophy } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { MetricCard } from "@/app/components/metric-card";
 import { PageHeader } from "@/app/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import {
@@ -14,8 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CHARTER_STATUS_LABELS, halfYearScore } from "@/lib/data/performance-types";
 import { getVisibleRecords } from "@/lib/data/person-record";
 import { getViewer } from "@/lib/data/viewer";
+import { formatDate } from "@/lib/utils";
 
 const CHECK_INS_PER_PERSON = 6;
 
@@ -46,6 +51,13 @@ export default async function AdminDashboardPage() {
   const releasedScores = records.flatMap((record) =>
     record.reviews.filter((review) => review.releasedAt !== null && review.quarterlyScore !== null),
   );
+  const meanQuarterlyScore =
+    releasedScores.length > 0
+      ? releasedScores.reduce(
+          (sum, review) => sum + (review.calibratedScore ?? review.quarterlyScore ?? 0),
+          0,
+        ) / releasedScores.length
+      : null;
 
   // Coach load is derived from who is actually named on each enrolment.
   const coaches = new Map<
@@ -71,8 +83,9 @@ export default async function AdminDashboardPage() {
 
   const distribution = [5, 4, 3, 2, 1].map((band) => ({
     band,
-    count: releasedScores.filter((review) => Math.round(review.quarterlyScore ?? 0) === band)
-      .length,
+    count: releasedScores.filter(
+      (review) => Math.round(review.calibratedScore ?? review.quarterlyScore ?? 0) === band,
+    ).length,
   }));
 
   return (
@@ -80,19 +93,18 @@ export default async function AdminDashboardPage() {
       <PageHeader
         eyebrow={cycle?.name ?? "No cycle open"}
         title="Programme dashboard"
+        action={
+          <Button variant="outline" nativeButton={false} render={<Link href="/records" />}>
+            Records &amp; downloads
+          </Button>
+        }
         description={
           cycle
-            ? `${cycle.startDate} – ${cycle.endDate} · ${total} people, ${coaches.size} coaches. Whether the rhythm is actually being kept: completion, score distribution, and coach load.`
+            ? `${formatDate(cycle.startDate)} – ${formatDate(cycle.endDate)} · ${total} people, ${coaches.size} coaches. Whether the rhythm is actually being kept: completion, score distribution, and coach load.`
             : "No cycle is open yet. Open one from Cycles & settings to enrol the roster."
         }
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="People in programme"
-          value={String(total)}
-          detail={`${coaches.size} coaches · ${coached} with a named coach`}
-          icon={BriefcaseBusiness}
-        />
         <MetricCard
           label="Charters approved and locked"
           value={`${approved} / ${total}`}
@@ -107,14 +119,16 @@ export default async function AdminDashboardPage() {
           icon={CalendarCheck2}
         />
         <MetricCard
-          label="Coaching coverage"
-          value={`${percent(coached, total)}%`}
-          detail={
-            coached === total
-              ? "Every enrolled person has a named coach."
-              : `${total - coached} without a coach.`
-          }
-          icon={ShieldCheck}
+          label="Scores released"
+          value={String(releasedScores.length)}
+          detail="Signed off and visible to the team member."
+          icon={ClipboardCheck}
+        />
+        <MetricCard
+          label="Mean quarterly score"
+          value={meanQuarterlyScore === null ? "—" : meanQuarterlyScore.toFixed(2)}
+          detail="Across released quarterly scores."
+          icon={Trophy}
         />
       </div>
 
@@ -215,6 +229,85 @@ export default async function AdminDashboardPage() {
                     </TableRow>
                   ))
                 )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Everyone, at a glance</CardTitle>
+            <CardDescription>
+              The programme record for every person in this cycle, with the same scope used by the
+              records and downloads pages.
+            </CardDescription>
+          </div>
+          <Badge variant="outline">{cycle?.name ?? "No cycle"}</Badge>
+        </CardHeader>
+        <CardContent className="px-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Person</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Coach</TableHead>
+                  <TableHead>Charter</TableHead>
+                  <TableHead>Check-ins</TableHead>
+                  {cycle?.quarters.map((quarter) => (
+                    <TableHead key={quarter.id}>{quarter.name}</TableHead>
+                  ))}
+                  <TableHead>Half-yearly</TableHead>
+                  <TableHead className="text-right" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((record) => (
+                  <TableRow key={record.participant.id}>
+                    <TableCell>
+                      <p className="font-medium">{record.participant.personName}</p>
+                      <p className="text-xs text-muted-foreground">{record.participant.title}</p>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {record.participant.unitName}
+                    </TableCell>
+                    <TableCell>{record.participant.coachName ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {record.charter
+                          ? CHARTER_STATUS_LABELS[record.charter.status]
+                          : "Not started"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {record.checkIns.filter((checkIn) => checkIn.notes !== null).length} / 6
+                    </TableCell>
+                    {cycle?.quarters.map((quarter) => {
+                      const review = record.reviews.find((entry) => entry.quarterId === quarter.id);
+                      const score = review?.calibratedScore ?? review?.quarterlyScore;
+                      return (
+                        <TableCell key={quarter.id} className="font-medium tabular-nums">
+                          {score?.toFixed(2) ?? "—"}
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell className="font-medium tabular-nums">
+                      {halfYearScore(record.reviews)?.toFixed(2) ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        nativeButton={false}
+                        render={<Link href={`/records/${record.participant.id}`} />}
+                      >
+                        Record
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

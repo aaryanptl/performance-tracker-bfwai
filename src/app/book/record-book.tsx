@@ -7,18 +7,7 @@ import {
   RECOMMENDATION_LABELS,
   REVIEW_STATUS_LABELS,
 } from "@/lib/data/performance-types";
-
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+import { formatDate } from "@/lib/utils";
 
 function Paragraphs({ text }: { text: string | null }) {
   if (!text) return <p className="muted">Not recorded.</p>;
@@ -31,9 +20,27 @@ function Paragraphs({ text }: { text: string | null }) {
   );
 }
 
+function Transcript({ entries }: { entries: PersonRecord["checkIns"][number]["transcript"] }) {
+  if (entries.length === 0) return null;
+  return (
+    <>
+      <h3>Conversation transcript</h3>
+      {entries.map((entry) => (
+        <div key={entry.id} className="box">
+          <p className="muted">
+            {entry.authorName} &middot; {formatDate(entry.createdAt)}
+          </p>
+          <Paragraphs text={entry.body} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** One person's complete cycle, laid out to read on screen and to print. */
 export function RecordBook({ record }: { record: PersonRecord }) {
-  const { participant, cycle, charter, checkIns, impactStatements, reviews } = record;
+  const { participant, cycle, charter, checkIns, impactStatements, reviews, developmentActions } =
+    record;
   const half = halfYearScore(reviews);
 
   return (
@@ -108,8 +115,7 @@ export function RecordBook({ record }: { record: PersonRecord }) {
                 <div key={decision.id} className="box">
                   <p>
                     <strong>{decision.actorName}</strong> &middot; {decision.capacity} &middot;{" "}
-                    {decision.decision.replace(/_/g, " ")} &middot;{" "}
-                    {formatDate(decision.createdAt)}
+                    {decision.decision.replace(/_/g, " ")} &middot; {formatDate(decision.createdAt)}
                   </p>
                   {decision.comment ? <p className="muted">{decision.comment}</p> : null}
                 </div>
@@ -133,7 +139,13 @@ export function RecordBook({ record }: { record: PersonRecord }) {
             </p>
             {checkIn.notes ? (
               <>
-                <h3>Progress</h3>
+                {checkIn.notes.openContext ? (
+                  <>
+                    <h3>Open</h3>
+                    <Paragraphs text={checkIn.notes.openContext} />
+                  </>
+                ) : null}
+                <h3>Goals</h3>
                 <Paragraphs text={checkIn.notes.progressSummary} />
                 {checkIn.notes.blockers ? (
                   <>
@@ -141,24 +153,13 @@ export function RecordBook({ record }: { record: PersonRecord }) {
                     <Paragraphs text={checkIn.notes.blockers} />
                   </>
                 ) : null}
-                {checkIn.notes.recognition ? (
-                  <>
-                    <h3>Recognition</h3>
-                    <Paragraphs text={checkIn.notes.recognition} />
-                  </>
-                ) : null}
                 <h3>Way forward</h3>
                 <Paragraphs text={checkIn.notes.wayForward} />
-                {checkIn.notes.supportToArrange ? (
-                  <>
-                    <h3>Support to arrange</h3>
-                    <Paragraphs text={checkIn.notes.supportToArrange} />
-                  </>
-                ) : null}
               </>
             ) : (
               <p className="muted">Scheduled, not yet recorded.</p>
             )}
+            <Transcript entries={checkIn.transcript} />
           </div>
         ))
       ) : (
@@ -178,8 +179,6 @@ export function RecordBook({ record }: { record: PersonRecord }) {
               <div key={item.id} style={{ marginTop: 10 }}>
                 <h3>Impact created</h3>
                 <Paragraphs text={item.impactCreated} />
-                <h3>Numbers &amp; evidence</h3>
-                <Paragraphs text={item.numbersAndEvidence} />
                 {item.competencyDemonstrated ? (
                   <>
                     <h3>Competency demonstrated</h3>
@@ -188,12 +187,7 @@ export function RecordBook({ record }: { record: PersonRecord }) {
                 ) : null}
               </div>
             ))}
-            {statement.learningCarriedForward ? (
-              <>
-                <h3>Learning carried forward</h3>
-                <Paragraphs text={statement.learningCarriedForward} />
-              </>
-            ) : null}
+            <Transcript entries={statement.transcript} />
           </div>
         ))
       ) : (
@@ -227,7 +221,7 @@ export function RecordBook({ record }: { record: PersonRecord }) {
                   <td className="num">{review.competencyRating ?? "—"}</td>
                   <td className="num">
                     {review.releasedAt && review.quarterlyScore !== null
-                      ? review.quarterlyScore.toFixed(2)
+                      ? (review.calibratedScore ?? review.quarterlyScore).toFixed(2)
                       : "—"}
                   </td>
                   <td>{REVIEW_STATUS_LABELS[review.status]}</td>
@@ -250,9 +244,7 @@ export function RecordBook({ record }: { record: PersonRecord }) {
               <p>
                 <strong>{review.quarterName}</strong>
                 {review.coachName ? ` · ${review.coachName}` : ""}
-                {review.recommendation
-                  ? ` · ${RECOMMENDATION_LABELS[review.recommendation]}`
-                  : ""}
+                {review.recommendation ? ` · ${RECOMMENDATION_LABELS[review.recommendation]}` : ""}
               </p>
               {review.goalScores.length > 0 ? (
                 <table>
@@ -288,17 +280,30 @@ export function RecordBook({ record }: { record: PersonRecord }) {
                   <Paragraphs text={review.developmentNeeds} />
                 </>
               ) : null}
-              {review.supportToProvide ? (
-                <>
-                  <h3>Support to provide</h3>
-                  <Paragraphs text={review.supportToProvide} />
-                </>
-              ) : null}
+              <Transcript entries={review.transcript} />
             </div>
           ))}
         </>
       ) : (
         <p className="muted">No scores have been recorded for this cycle.</p>
+      )}
+
+      <h2>5 &middot; Development actions</h2>
+      {developmentActions.length > 0 ? (
+        developmentActions.map((action) => (
+          <div key={action.id} className="box">
+            <p>
+              <strong>{action.actionText}</strong> &middot; {action.status.replace(/_/g, " ")}
+            </p>
+            <p className="muted">
+              {action.supportType ?? "Support not specified"}
+              {action.dueDate ? ` · due ${formatDate(action.dueDate)}` : ""}
+              {action.completedAt ? ` · completed ${formatDate(action.completedAt)}` : ""}
+            </p>
+          </div>
+        ))
+      ) : (
+        <p className="muted">No development actions have been recorded.</p>
       )}
     </article>
   );

@@ -10,6 +10,7 @@ import {
   LibraryBig,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trophy,
   Users,
@@ -53,6 +54,12 @@ export const NAVIGATION: NavigationGroup[] = [
       { label: "Dashboard", href: "/admin/dashboard", icon: Gauge, roles: ["admin"] },
       { label: "People", href: "/admin/people", icon: BriefcaseBusiness, roles: ["admin"] },
       { label: "Cycles", href: "/admin/cycles", icon: Settings2, roles: ["admin"] },
+      {
+        label: "Calibration",
+        href: "/admin/calibration",
+        icon: SlidersHorizontal,
+        roles: ["admin"],
+      },
       { label: "Records", href: "/records", icon: FileArchive, roles: ["coach", "admin"] },
     ],
   },
@@ -98,6 +105,10 @@ export const ROUTE_TITLES: Record<string, { title: string; description: string }
   "/coaching/scoring": {
     title: "Scoring",
     description: "Complete evidence-backed quarterly ratings for your team.",
+  },
+  "/admin/calibration": {
+    title: "Calibration",
+    description: "Review, adjust, and release coach scores with a written rationale.",
   },
   "/admin/dashboard": {
     title: "Programme dashboard",

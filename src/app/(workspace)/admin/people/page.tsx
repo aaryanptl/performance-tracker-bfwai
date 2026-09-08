@@ -106,7 +106,7 @@ export default async function PeoplePage() {
       <PageHeader
         eyebrow={`${active.length} people`}
         title="People & coaches"
-        description="The source of truth for the roster: names, units, levels, employment, authority and coaching lines. A person's coach decides exactly what that coach can read and download, so changing that column changes their access."
+        description="The source of truth for the roster: names, units, levels, employment, authority, team leaders and coaching lines. A person's coach decides exactly what that coach can read and download, so changing that column changes their access."
         action={
           <>
             <Badge variant="outline">{admins} administrators</Badge>
