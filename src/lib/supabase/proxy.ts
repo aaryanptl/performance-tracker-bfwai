@@ -48,8 +48,9 @@ export async function updateSession(request: NextRequest) {
   const claims = data?.claims;
   const pathname = request.nextUrl.pathname;
   const isSignIn = pathname === "/signin";
+  const isAuthCallback = pathname === "/auth/callback";
 
-  if (!claims && !isSignIn) {
+  if (!claims && !isSignIn && !isAuthCallback) {
     return redirectWithSession(request, supabaseResponse, "/signin");
   }
 

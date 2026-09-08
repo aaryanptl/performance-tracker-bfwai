@@ -227,6 +227,7 @@ function WorkspaceHeader({ cycle }: { cycle: CycleSummary | null }) {
       {cycle ? (
         <Select
           defaultValue={String(cycle.id)}
+          items={{ [String(cycle.id)]: cycle.name }}
           className="hidden w-48 md:block"
         >
           <SelectTrigger aria-label="Active cycle">
@@ -254,7 +255,9 @@ export function AppShell({
         <WorkspaceSidebar />
         <SidebarInset>
           <WorkspaceHeader cycle={cycle} />
-          <div className="mx-auto w-full max-w-[1440px] flex-1 p-4 sm:p-6 lg:p-8">{children}</div>
+          <div className="mx-auto min-w-0 w-full max-w-[1440px] flex-1 p-4 sm:p-6 lg:p-8">
+            {children}
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

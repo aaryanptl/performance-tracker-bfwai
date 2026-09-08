@@ -3,6 +3,7 @@ import { SignInPanel } from "@/app/components/sign-in-panel";
 
 const ERROR_MESSAGES: Record<string, string> = {
   account_not_linked: "Your login exists, but it is not linked to an active employee profile.",
+  auth_callback_failed: "Google sign-in could not be completed. Please try again.",
 };
 
 export default async function SignInPage({

@@ -2,6 +2,7 @@
 
 import { Check, Save, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { ChangeEventHandler } from "react";
 import { useActionState, useEffect, useState } from "react";
 
 import {
@@ -14,6 +15,7 @@ import {
   saveImpact,
   submitImpact,
 } from "@/app/(workspace)/impact/actions";
+import { type CheckInDraft, TranscriptAssistant } from "@/app/components/transcript-assistant";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +83,8 @@ function Field({
   placeholder,
   rows = 4,
   defaultValue,
+  value,
+  onChange,
   disabled,
 }: {
   id: string;
@@ -90,6 +94,8 @@ function Field({
   placeholder: string;
   rows?: number;
   defaultValue?: string;
+  value?: string;
+  onChange?: ChangeEventHandler<HTMLTextAreaElement>;
   disabled?: boolean;
 }) {
   return (
@@ -102,6 +108,8 @@ function Field({
         rows={rows}
         placeholder={placeholder}
         defaultValue={defaultValue}
+        value={value}
+        onChange={onChange}
         disabled={disabled}
       />
     </div>
@@ -296,6 +304,15 @@ export function ImpactForm({
 
 /* -------------------------------------------------------------- check-in */
 
+function checkInDraftFor(existing: CheckInRecord | undefined): CheckInDraft {
+  return {
+    openContext: existing?.notes?.openContext ?? "",
+    progressSummary: existing?.notes?.progressSummary ?? "",
+    blockers: existing?.notes?.blockers ?? "",
+    wayForward: existing?.notes?.wayForward ?? "",
+  };
+}
+
 export function CheckInForm({
   participantId,
   personName,
@@ -319,12 +336,21 @@ export function CheckInForm({
       ? initialMonth
       : (months[0]?.value ?? ""),
   );
+  const existing = checkIns.find((checkIn) => checkIn.monthStart === month);
+  const [draft, setDraft] = useState<CheckInDraft>(() => checkInDraftFor(existing));
+  const [transcript, setTranscript] = useState("");
+
+  useEffect(() => {
+    setDraft(checkInDraftFor(checkIns.find((checkIn) => checkIn.monthStart === month)));
+    setTranscript("");
+  }, [checkIns, month]);
 
   useEffect(() => {
     if (state.message) router.refresh();
   }, [router, state.message]);
 
-  const existing = checkIns.find((checkIn) => checkIn.monthStart === month);
+  const patchDraft = (next: Partial<CheckInDraft>) =>
+    setDraft((current) => ({ ...current, ...next }));
 
   return (
     <form action={formAction} className="grid gap-5">
@@ -374,6 +400,16 @@ export function CheckInForm({
             </div>
           </div>
 
+          <TranscriptAssistant
+            participantId={participantId}
+            monthStart={month}
+            personName={personName}
+            onApply={(nextDraft, sourceTranscript) => {
+              setDraft(nextDraft);
+              setTranscript(sourceTranscript);
+            }}
+          />
+
           {/* The four stages map directly onto the prototype's check-in record. */}
           <Field
             key={`${month}-open`}
@@ -383,7 +419,8 @@ export function CheckInForm({
             hint={CHECKIN_STAGES[0].prompt}
             placeholder="How has the month been? Let them speak first. Optional notes."
             rows={2}
-            defaultValue={existing?.notes?.openContext ?? ""}
+            value={draft.openContext}
+            onChange={(event) => patchDraft({ openContext: event.target.value })}
           />
           <Field
             key={`${month}-progress`}
@@ -393,7 +430,8 @@ export function CheckInForm({
             hint={CHECKIN_STAGES[1].prompt}
             placeholder="What moved this month, and what the numbers say."
             rows={3}
-            defaultValue={existing?.notes?.progressSummary ?? ""}
+            value={draft.progressSummary}
+            onChange={(event) => patchDraft({ progressSummary: event.target.value })}
           />
           <Field
             key={`${month}-blockers`}
@@ -403,7 +441,8 @@ export function CheckInForm({
             hint={CHECKIN_STAGES[2].prompt}
             placeholder="What is in the way. Optional."
             rows={3}
-            defaultValue={existing?.notes?.blockers ?? ""}
+            value={draft.blockers}
+            onChange={(event) => patchDraft({ blockers: event.target.value })}
           />
           <Field
             key={`${month}-forward`}
@@ -413,7 +452,8 @@ export function CheckInForm({
             hint={CHECKIN_STAGES[3].prompt}
             placeholder="Specific actions, owners, and what happens before the next one."
             rows={3}
-            defaultValue={existing?.notes?.wayForward ?? ""}
+            value={draft.wayForward}
+            onChange={(event) => patchDraft({ wayForward: event.target.value })}
           />
           <TranscriptList entries={existing?.transcript ?? []} />
           <Field
@@ -424,6 +464,8 @@ export function CheckInForm({
             hint="Optional. Keep the important wording or decision from this conversation with the record."
             placeholder="What was said, decided, or agreed."
             rows={4}
+            value={transcript}
+            onChange={(event) => setTranscript(event.target.value)}
           />
         </CardContent>
         <CardFooter className="justify-end gap-3 border-t">

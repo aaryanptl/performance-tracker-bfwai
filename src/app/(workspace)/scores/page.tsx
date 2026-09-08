@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
 import {
   halfYearScore,
+  performanceLevelForScore,
   RECOMMENDATION_LABELS,
   REVIEW_STATUS_LABELS,
 } from "@/lib/data/performance-types";
@@ -61,7 +62,12 @@ export default async function ScoresPage() {
                   tile.value.toFixed(2)
                 )}
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">{tile.label}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="text-sm text-muted-foreground">{tile.label}</p>
+                {tile.value !== null ? (
+                  <Badge variant="outline">Level {performanceLevelForScore(tile.value)}</Badge>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -105,11 +111,18 @@ export default async function ScoresPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Quarterly score</p>
-                    <p className="font-heading text-xl font-semibold">
-                      {review.calibratedScore?.toFixed(2) ??
-                        review.quarterlyScore?.toFixed(2) ??
-                        "—"}
-                    </p>
+                    {(() => {
+                      const effectiveScore = review.calibratedScore ?? review.quarterlyScore;
+                      const level = performanceLevelForScore(effectiveScore);
+                      return (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-heading text-xl font-semibold">
+                            {effectiveScore?.toFixed(2) ?? "—"}
+                          </p>
+                          {level !== null ? <Badge variant="outline">Level {level}</Badge> : null}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

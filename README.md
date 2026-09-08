@@ -19,6 +19,10 @@ pnpm format:check
 pnpm build
 ```
 
+To enable the coach check-in transcript assistant, add the server-only
+`GEMINI_API_KEY` to `.env.local`. The optional `GEMINI_MODEL` setting defaults
+to `gemini-2.5-flash`.
+
 The development server runs at [http://localhost:3000](http://localhost:3000).
 
 ## Architecture

@@ -1,16 +1,41 @@
 "use client";
 
 import { LockKeyhole, LogIn } from "lucide-react";
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { signIn } from "@/app/signin/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
 
 export function SignInPanel({ initialError = null }: { initialError?: string | null }) {
   const [state, formAction, pending] = useActionState(signIn, { error: initialError });
+  const [googlePending, setGooglePending] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  async function handleGoogleSignIn() {
+    setGooglePending(true);
+    setGoogleError(null);
+
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", "/");
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: callbackUrl.toString() },
+    });
+
+    if (error) {
+      setGooglePending(false);
+      setGoogleError("Google sign-in could not be started. Please try again.");
+    }
+  }
+
+  const errorMessage = googleError ?? state.error;
 
   return (
     <div>
@@ -24,6 +49,29 @@ export function SignInPanel({ initialError = null }: { initialError?: string | n
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="w-full"
+            onClick={handleGoogleSignIn}
+            disabled={pending || googlePending}
+          >
+            <span
+              aria-hidden="true"
+              className="grid size-5 place-items-center rounded-full bg-white text-sm font-semibold text-[#4285f4]"
+            >
+              G
+            </span>
+            {googlePending ? "Connecting to Google…" : "Continue with Google"}
+          </Button>
+          <div className="my-5 flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              or
+            </span>
+            <Separator className="flex-1" />
+          </div>
           <form action={formAction} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Work email</Label>
@@ -46,9 +94,9 @@ export function SignInPanel({ initialError = null }: { initialError?: string | n
                 required
               />
             </div>
-            {state.error ? (
+            {errorMessage ? (
               <Alert variant="destructive">
-                <AlertDescription>{state.error}</AlertDescription>
+                <AlertDescription>{errorMessage}</AlertDescription>
               </Alert>
             ) : null}
             <Button type="submit" size="lg" className="w-full" disabled={pending}>

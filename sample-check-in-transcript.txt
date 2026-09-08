@@ -1,0 +1,17 @@
+Monthly check-in — Aryan Patel and Satvik
+Date: 4 September 2026
+
+Satvik: How has the month been?
+Aryan: It has been a busy month, but I feel good about the progress. I spent most of my time finishing the onboarding checklist and improving the internal reporting flow.
+
+Satvik: What moved against your goals?
+Aryan: The onboarding checklist is now complete. I also reduced the average report preparation time from about two hours to forty-five minutes by adding a reusable template. The new reporting flow is being used by the engineering team, and I walked Priya through it yesterday.
+
+Satvik: What is getting in the way?
+Aryan: The main blocker is that I still do not have access to the analytics dashboard. That means I cannot verify the weekly adoption numbers myself. I have been asking the Operations team for access since Monday, and they said they should resolve it this week.
+
+Satvik: What should happen before our next check-in?
+Aryan: I will finish the reporting documentation and send it to Priya by Friday. Priya will review the handoff and confirm that the team can use the template without help. Satvik will follow up with Operations about dashboard access. Once I have access, I will add the weekly adoption numbers to the report.
+
+Satvik: Is there anything else you need from me?
+Aryan: No additional support right now. The dashboard access is the one thing that would make the next step easier.

@@ -61,9 +61,9 @@ export function ParticipantTable({
           : `/records/${participant.id}`;
 
   return (
-    <Card>
-      <CardContent className="px-0">
-        <div className="overflow-x-auto">
+    <Card className="min-w-0">
+      <CardContent className="min-w-0 px-0">
+        <div className="min-w-0">
           <Table>
             <TableHeader>
               <TableRow>

@@ -291,6 +291,16 @@ export interface PersonRecord {
   developmentActions: DevelopmentAction[];
 }
 
+/**
+ * Maps an effective calibrated score to the whole-number performance level it
+ * falls into. Scores are stored with two decimal places, while the programme
+ * presents the resulting level on the 1–5 scale.
+ */
+export function performanceLevelForScore(score: number | null): number | null {
+  if (score === null || !Number.isFinite(score)) return null;
+  return Math.min(5, Math.max(1, Math.round(score)));
+}
+
 /** The half-yearly score: the plain average of the released quarterly scores. */
 export function halfYearScore(reviews: QuarterlyReview[]): number | null {
   const released = reviews.filter(
