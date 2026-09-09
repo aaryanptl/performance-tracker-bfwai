@@ -102,7 +102,7 @@ const TIMELINE = [
     "At each quarter end",
     "a 30-minute scoring conversation: each goal scored 0.0–1.0 from its data source, competencies discussed orally, Score 1 and Score 2 recorded.",
   ],
-  ["Quarter end + one week", "calibration across all coaches, then sign-off and release."],
+  ["Quarter end + one week", "optional calibration when needed, then release to the team member."],
   [
     "At the half-year",
     "the full 60-minute review and feedback session. Half-yearly score = the average of the two quarters.",
@@ -180,7 +180,7 @@ const FAQ = [
   ],
   [
     "Can my coach change a score after we talked?",
-    "Only before signing. After signing it goes to calibration, and after release it is fixed with all three signatures and timestamps attached.",
+    "Coaches can change a score before they sign. Leadership may calibrate it or release the completed review directly; after release it is fixed with the signatures and timestamps attached.",
   ],
   [
     "What happens if a check-in is missed?",

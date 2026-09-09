@@ -7,7 +7,7 @@ import { ReleaseReviewButton } from "@/app/components/record-actions";
 import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getVisibleParticipants } from "@/lib/data/cycle";
 import { REVIEW_STATUS_LABELS } from "@/lib/data/performance-types";
 import { getReviews } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
@@ -16,7 +16,7 @@ export default async function CalibrationPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participants = cycle ? await getVisibleParticipants(viewer.supabase, cycle.id) : [];
   const entries = (
     await Promise.all(
@@ -40,15 +40,15 @@ export default async function CalibrationPage() {
       <PageHeader
         eyebrow="Leadership only"
         title="Calibration"
-        description="Review coach ratings together, record any final score adjustment with a reason, then release the agreed score to the team member."
+        description="Review coach ratings, optionally record a final score adjustment with a reason, then release the agreed score to the team member."
       />
       {!cycle || entries.length === 0 ? (
         <WorkflowEmpty
           icon={SlidersHorizontal}
-          title="Nothing is ready for calibration"
+          title="Nothing is ready for calibration or release"
           description={
             cycle
-              ? "Completed coach reviews will appear here before release."
+              ? "Completed coach reviews will appear here for optional calibration or direct release."
               : "Open a cycle and complete a coach review first."
           }
         />

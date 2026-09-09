@@ -5,7 +5,7 @@ import { PageHeader } from "@/app/components/page-header";
 import { ReviewForm } from "@/app/components/performance-forms";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveCycle, getParticipantById } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getParticipantById } from "@/lib/data/cycle";
 import { REVIEW_STATUS_LABELS } from "@/lib/data/performance-types";
 import { getCharter, getImpactStatements, getReviews } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
@@ -21,7 +21,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const participant = await getParticipantById(viewer.supabase, participantId);
   if (!participant) notFound();
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   if (!cycle) notFound();
 
   const [charter, impacts, reviews] = await Promise.all([

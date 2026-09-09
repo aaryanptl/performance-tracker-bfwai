@@ -7,6 +7,7 @@ import { decideCharter } from "@/app/(workspace)/charter/actions";
 import {
   acknowledgeCheckIn,
   acknowledgeReview,
+  releaseOwnReviews,
   releaseReview,
 } from "@/app/(workspace)/coaching/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -60,6 +61,20 @@ export function ReleaseReviewButton({ reviewId }: { reviewId: number }) {
       <Button type="submit" size="sm" disabled={pending}>
         <Send />
         {pending ? "Releasing…" : "Release to the person"}
+      </Button>
+      <Result state={state} />
+    </form>
+  );
+}
+
+/** A coach releases all of their completed current-cycle reviews at once. */
+export function ReleaseAllReviewsButton({ count }: { count: number }) {
+  const [state, action, pending] = useActionState(async () => releaseOwnReviews(), IDLE);
+  return (
+    <form action={action}>
+      <Button type="submit" disabled={pending}>
+        <Send />
+        {pending ? "Releasing scores…" : `Release all ${count} completed scores`}
       </Button>
       <Result state={state} />
     </form>

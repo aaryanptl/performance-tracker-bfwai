@@ -1,16 +1,19 @@
 "use client";
 
-import { Mail, Pencil, Search, TriangleAlert } from "lucide-react";
+import { Mail, Pencil, Search, TriangleAlert, UserRoundCheck, UserRoundPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import {
   assignCoach,
   assignLeader,
+  enrollAllPeopleInCurrentCycle,
+  enrollPersonInCurrentCycle,
   invitePerson,
   type RosterActionResult,
 } from "@/app/(workspace)/admin/people/actions";
 import { AddPersonDialog } from "@/app/components/add-person-dialog";
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { PersonEditSheet } from "@/app/components/person-edit-sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -43,11 +46,12 @@ const ROLE_BADGE = {
 } as const;
 
 export function PeopleRoster({ roster }: { roster: Roster }) {
-  const { people, units, viewerId } = roster;
+  const { people, units, currentCycle, currentCycleParticipantIds, viewerId } = roster;
   const [query, setQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [coachDrafts, setCoachDrafts] = useState<Record<number, string>>({});
   const [leaderDrafts, setLeaderDrafts] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -77,6 +81,46 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
 
   const inactiveCount = people.filter((person) => !person.active).length;
   const editing = people.find((person) => person.id === editingId) ?? null;
+  const personById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
+  const csvRows = useMemo(
+    () => [
+      [
+        "Name",
+        "Email",
+        "Position",
+        "Unit",
+        "Level",
+        "Employment",
+        "Team leader",
+        "Coach",
+        "Coachees",
+        "Role",
+        "Active",
+        "Account",
+        "Cycle access",
+      ],
+      ...visible.map((person) => [
+        person.name,
+        person.email,
+        person.title,
+        person.unitName,
+        person.level,
+        EMPLOYMENT_LABELS[person.employment],
+        personById.get(person.leaderId ?? -1)?.name ?? "",
+        personById.get(person.coachId ?? -1)?.name ?? "",
+        person.coacheeCount,
+        person.role,
+        person.active ? "Active" : "Inactive",
+        person.hasAccount ? "Linked" : "Not linked",
+        currentCycle
+          ? currentCycleParticipantIds.includes(person.id)
+            ? "Enrolled"
+            : "Not enrolled"
+          : "No active cycle",
+      ]),
+    ],
+    [currentCycle, currentCycleParticipantIds, personById, visible],
+  );
 
   function changeCoach(person: RosterPerson, value: string) {
     setCoachDrafts((current) => ({ ...current, [person.id]: value }));
@@ -126,6 +170,34 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
     });
   }
 
+  function enroll(person: RosterPerson) {
+    setBusyId(person.id);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await enrollPersonInCurrentCycle(person.id);
+      setBusyId(null);
+      if (result.error) setMessage(result.error);
+      else router.refresh();
+    });
+  }
+
+  const unenrolledActiveCount = currentCycle
+    ? people.filter((person) => person.active && !currentCycleParticipantIds.includes(person.id))
+        .length
+    : 0;
+
+  function enrollAll() {
+    if (!currentCycle || unenrolledActiveCount === 0) return;
+    setBulkBusy(true);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await enrollAllPeopleInCurrentCycle();
+      setBulkBusy(false);
+      if (result.error) setMessage(result.error);
+      else router.refresh();
+    });
+  }
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -140,6 +212,21 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
           />
         </div>
         <div className="flex items-center gap-2">
+          {currentCycle ? (
+            <Button
+              disabled={bulkBusy || busyId !== null || unenrolledActiveCount === 0}
+              onClick={enrollAll}
+              size="sm"
+              variant="outline"
+            >
+              <UserRoundPlus />
+              {bulkBusy
+                ? "Adding…"
+                : unenrolledActiveCount > 0
+                  ? `Add ${unenrolledActiveCount} to ${currentCycle.name}`
+                  : `Everyone in ${currentCycle.name}`}
+            </Button>
+          ) : null}
           {inactiveCount > 0 ? (
             <Button onClick={() => setShowInactive((value) => !value)} size="sm" variant="ghost">
               {showInactive ? "Hide" : "Show"} {inactiveCount} inactive
@@ -157,6 +244,13 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
       ) : null}
 
       <Card>
+        <div className="flex justify-end px-4 pt-4">
+          <CsvDownloadButton
+            filename="ascend-roster.csv"
+            rows={csvRows}
+            label="Download table CSV"
+          />
+        </div>
         <CardContent className="px-0">
           <Table>
             <TableHeader>
@@ -168,6 +262,7 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                 <TableHead className="min-w-44">Team leader</TableHead>
                 <TableHead className="min-w-44">Coach</TableHead>
                 <TableHead className="text-right">Coachees</TableHead>
+                <TableHead className="min-w-44">Cycle access</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Edit</TableHead>
               </TableRow>
@@ -207,7 +302,9 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                       value={leaderDrafts[person.id] ?? String(person.leaderId ?? "")}
                     >
                       <SelectTrigger aria-label={`Team leader of ${person.name}`} size="sm">
-                        <SelectValue />
+                        <SelectValue>
+                          {(value) => personById.get(Number(value))?.name ?? "No team leader"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">No team leader</SelectItem>
@@ -229,7 +326,9 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                       value={coachDrafts[person.id] ?? String(person.coachId ?? "")}
                     >
                       <SelectTrigger aria-label={`Coach of ${person.name}`} size="sm">
-                        <SelectValue />
+                        <SelectValue>
+                          {(value) => personById.get(Number(value))?.name ?? "No coach"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">No coach</SelectItem>
@@ -244,6 +343,32 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
                     </Select>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{person.coacheeCount}</TableCell>
+                  <TableCell>
+                    {currentCycle ? (
+                      currentCycleParticipantIds.includes(person.id) ? (
+                        <Badge variant="outline">
+                          <UserRoundCheck /> Enrolled
+                        </Badge>
+                      ) : person.active ? (
+                        <div className="grid justify-items-start gap-1">
+                          <Badge variant="destructive">Not enrolled</Badge>
+                          <Button
+                            disabled={busyId === person.id}
+                            onClick={() => enroll(person)}
+                            size="sm"
+                            variant="ghost"
+                          >
+                            <UserRoundPlus />
+                            {busyId === person.id ? "Adding…" : `Add to ${currentCycle.name}`}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Badge variant="outline">Roster inactive</Badge>
+                      )
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No active cycle</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={person.active ? "outline" : "destructive"}>
                       {person.active ? "Active" : "Inactive"}
@@ -274,7 +399,7 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
               ))}
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={9}>
+                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={10}>
                     No one on the roster matches that search.
                   </TableCell>
                 </TableRow>
@@ -285,10 +410,11 @@ export function PeopleRoster({ roster }: { roster: Roster }) {
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        The coach column saves as soon as you choose, because it is the access boundary: a new
-        coaching line opens and the old one closes. Team leader is saved against the current cycle.
-        Everything else about a person — name, email, position, unit, level, employment and
-        authority — is edited in one panel behind{" "}
+        Cycle access adds an active roster member to the current cycle and snapshots their position,
+        level, employment and coach. The coach column saves as soon as you choose, because it is the
+        access boundary: a new coaching line opens and the old one closes. Team leader is saved
+        against the current cycle. Everything else about a person — name, email, position, unit,
+        level, employment and authority — is edited in one panel behind{" "}
         <span className="font-medium text-foreground">Edit</span>.
       </p>
 

@@ -1,13 +1,14 @@
 import { BookOpen, CalendarPlus, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { PageHeader } from "@/app/components/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { initials } from "@/data/people";
+import { buildExports } from "@/lib/data/exports";
 import {
   CHARTER_STATUS_LABELS,
   CHECK_IN_STATUS_LABELS,
@@ -56,6 +57,7 @@ export default async function CoacheePage({ params }: { params: Promise<{ id: st
     record;
   const recorded = checkIns.filter((checkIn) => checkIn.notes !== null).length;
   const half = halfYearScore(reviews);
+  const userExports = buildExports([record]);
 
   return (
     <>
@@ -65,6 +67,21 @@ export default async function CoacheePage({ params }: { params: Promise<{ id: st
         description="The complete cycle record: charter, monthly conversations, impact statements, scoring, and development follow-through."
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <CsvDownloadButton
+              files={[
+                { filename: "ascend-user-people.csv", content: userExports.people },
+                { filename: "ascend-user-charters.csv", content: userExports.charters },
+                { filename: "ascend-user-check-ins.csv", content: userExports.checkIns },
+                { filename: "ascend-user-impact.csv", content: userExports.impact },
+                { filename: "ascend-user-scores.csv", content: userExports.scores },
+                { filename: "ascend-user-transcript.csv", content: userExports.transcript },
+                {
+                  filename: "ascend-user-development-actions.csv",
+                  content: userExports.developmentActions,
+                },
+              ]}
+              label="Download user CSVs"
+            />
             <Button
               variant="outline"
               nativeButton={false}

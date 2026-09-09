@@ -14,7 +14,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getOwnParticipant } from "@/lib/data/cycle";
 import { CHARTER_STATUS_LABELS } from "@/lib/data/performance-types";
 import { getCharter, getCheckIns, getImpactStatements } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
@@ -23,7 +23,7 @@ export default async function OverviewPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participant = cycle
     ? await getOwnParticipant(viewer.supabase, cycle.id, viewer.personId)
     : null;

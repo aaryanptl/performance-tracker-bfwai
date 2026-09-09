@@ -83,7 +83,7 @@ function backHrefForPath(pathname: string) {
   return "/";
 }
 
-function WorkspaceSidebar() {
+function WorkspaceSidebar({ approvalCount }: { approvalCount: number }) {
   const pathname = usePathname();
   const { person } = useSession();
   const { setOpenMobile } = useSidebar();
@@ -126,7 +126,9 @@ function WorkspaceSidebar() {
                           <item.icon />
                           <span>{item.label}</span>
                         </SidebarMenuButton>
-                        {item.badge ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
+                        {item.href === "/coaching/approvals" && approvalCount > 0 ? (
+                          <SidebarMenuBadge>{approvalCount}</SidebarMenuBadge>
+                        ) : null}
                       </SidebarMenuItem>
                     );
                   })}
@@ -226,7 +228,7 @@ function WorkspaceHeader({ cycle }: { cycle: CycleSummary | null }) {
       </Badge>
       {cycle ? (
         <Select
-          defaultValue={String(cycle.id)}
+          value={String(cycle.id)}
           items={{ [String(cycle.id)]: cycle.name }}
           className="hidden w-48 md:block"
         >
@@ -245,14 +247,16 @@ function WorkspaceHeader({ cycle }: { cycle: CycleSummary | null }) {
 export function AppShell({
   children,
   cycle,
+  approvalCount,
 }: {
   children: React.ReactNode;
   cycle: CycleSummary | null;
+  approvalCount: number;
 }) {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <WorkspaceSidebar />
+        <WorkspaceSidebar approvalCount={approvalCount} />
         <SidebarInset>
           <WorkspaceHeader cycle={cycle} />
           <div className="mx-auto min-w-0 w-full max-w-[1440px] flex-1 p-4 sm:p-6 lg:p-8">

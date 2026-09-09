@@ -5,6 +5,17 @@
 
 export const AUTHORITY_ROLES = ["member", "hr_admin", "founder"] as const;
 export const EMPLOYMENT_TYPES = ["full_time", "intern", "contractor"] as const;
+export const POSITION_OPTIONS = [
+  "AI Engineer",
+  "Customer Success - Associate",
+  "Founder",
+  "Marketing & Growth Manager",
+  "People & HR",
+  "Product Associate",
+  "Sales Associate",
+  "Sales Manager",
+  "Video Editor - Associate",
+] as const;
 
 export type AuthorityRole = (typeof AUTHORITY_ROLES)[number];
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
@@ -53,6 +64,8 @@ export interface RosterPerson {
 export interface Roster {
   people: RosterPerson[];
   units: RosterUnit[];
+  currentCycle: { id: number; name: string } | null;
+  currentCycleParticipantIds: number[];
   /** The signed-in administrator, so the table can refuse self-inflicted lockouts. */
   viewerId: number | null;
 }

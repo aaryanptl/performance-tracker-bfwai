@@ -67,7 +67,7 @@ export function ScoringGuideDialog() {
             <span className="font-medium">
               Quarterly score = (Score 1 &times; {okr}) + (Score 2 &times; {competency})
             </span>
-            , calibrated across all coaches before release.
+            . Leadership can calibrate the score before release when needed.
           </li>
         </ol>
         <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10">

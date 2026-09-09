@@ -1,7 +1,15 @@
 import { CHARTER_STEPS } from "@/data/performance";
+import type { CharterStatus } from "@/lib/data/performance-types";
 import { cn } from "@/lib/utils";
 
 /** The four-step path a charter travels, from draft to locked. */
+export function charterStepForStatus(status: CharterStatus | null): number {
+  if (status === null || status === "draft") return 1;
+  if (status === "approved_locked") return 4;
+  if (status === "coach_reviewed") return 3;
+  return 2;
+}
+
 export function CharterApprovalStrip({
   currentStep = 1,
   className,

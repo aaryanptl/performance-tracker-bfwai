@@ -1,14 +1,17 @@
 "use client";
 
-import { LibraryBig, Plus, Printer, Save, Send, Sparkles } from "lucide-react";
+import { Copy, LibraryBig, Plus, Printer, Save, Send, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useId, useMemo, useState } from "react";
+import { useActionState, useEffect, useId, useMemo, useState } from "react";
 import {
   type CharterActionResult,
   saveCharter,
   submitCharter,
 } from "@/app/(workspace)/charter/actions";
-import { CharterApprovalStrip } from "@/app/components/charter-approval-strip";
+import {
+  CharterApprovalStrip,
+  charterStepForStatus,
+} from "@/app/components/charter-approval-strip";
 import { CompetencyAnchorsDialog } from "@/app/components/competency-anchors-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +21,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -31,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { LIBRARY_OKRS } from "@/data/library";
 import {
   APPROVER_LABEL,
@@ -365,9 +370,9 @@ function CompetencyCard({
 }) {
   const fieldId = useId();
   return (
-    <Card>
-      <CardContent className="grid gap-5">
-        <div className="flex items-start justify-between gap-4">
+    <Card size="sm" className="h-full">
+      <CardContent className="flex flex-1 flex-col gap-4">
+        <div className="grid gap-3">
           <div className="min-w-0">
             <Eyebrow>
               Competency {index + 1} &middot;{" "}
@@ -375,7 +380,7 @@ function CompetencyCard({
             </Eyebrow>
             <h3 className="mt-1 font-heading text-base font-semibold">{competency.name}</h3>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {onRemove ? (
               <Button variant="destructive" size="sm" disabled={disabled} onClick={onRemove}>
                 Remove
@@ -384,19 +389,20 @@ function CompetencyCard({
             <CompetencyAnchorsDialog competency={competency} />
           </div>
         </div>
-        <p className="text-sm leading-6 text-muted-foreground">{competency.definition}</p>
-        <div className="grid gap-2">
+        <p className="text-[0.8125rem] leading-5 text-muted-foreground">{competency.definition}</p>
+        <div className="mt-auto grid gap-2">
           <Label htmlFor={`${fieldId}-commitment`}>My commitment &mdash; one line</Label>
-          <p className="-mt-1 text-xs text-muted-foreground">
+          <p className="-mt-1 text-[0.7rem] leading-4 text-muted-foreground">
             What you will actually do under this competency. This is what the quarterly discussion
             is judged against.
           </p>
-          <Input
+          <Textarea
             id={`${fieldId}-commitment`}
             value={commitment}
             onChange={(event) => onCommitmentChange(event.target.value)}
             disabled={disabled}
             placeholder="e.g. weekly written project update to all stakeholders"
+            rows={2}
             className={FIELD}
           />
         </div>
@@ -408,6 +414,8 @@ function CompetencyCard({
 export function CharterEditor({
   cycle,
   charter,
+  previousCharter,
+  previousCycleName,
   competencyIds,
   personName,
   unitName,
@@ -415,6 +423,8 @@ export function CharterEditor({
 }: {
   cycle: CycleSummary;
   charter: Charter | null;
+  previousCharter: Charter | null;
+  previousCycleName: string | null;
   /** Competency name to its `public.competencies` id, from the loaded library. */
   competencyIds: Record<string, number>;
   personName: string;
@@ -427,8 +437,10 @@ export function CharterEditor({
     error: null,
   } as CharterActionResult);
 
-  const editable = charter === null || CHARTER_EDITABLE.includes(charter.status);
   const status = charter?.status ?? "draft";
+  const approvedAndLocked = status === "approved_locked";
+  const editable = charter === null || CHARTER_EDITABLE.includes(status) || approvedAndLocked;
+  const canSend = charter !== null && CHARTER_EDITABLE.includes(status);
 
   // A saved charter seeds the editor; an unsaved one starts with a single row
   // so there is always something to type into.
@@ -461,6 +473,35 @@ export function CharterEditor({
   const goalsLeft = cycle.maxGoals - goals.length;
   const stillToChoose = CHARTER_CHOSEN_COMPETENCIES - chosen.length;
   const libraryLoaded = Object.keys(competencyIds).length > 0;
+
+  const copyPreviousCharter = () => {
+    if (!previousCharter) return;
+
+    setGoals(
+      previousCharter.goals.map((goal, index) => ({
+        id: `goal-previous-${index + 1}`,
+        objective: goal.outcome,
+        keyResult: goal.keyResult,
+        baseline: goal.baseline,
+        target: goal.target,
+        dataSource: goal.dataSource,
+      })),
+    );
+    setCommitments(
+      Object.fromEntries(
+        previousCharter.competencies.map((competency) => [
+          competency.name,
+          competency.commitment,
+        ]),
+      ),
+    );
+    setChosen(
+      previousCharter.competencies
+        .filter((competency) => !fixed.some((item) => item.name === competency.name))
+        .map((competency) => competencyByName(competency.name))
+        .filter((competency): competency is LibraryCompetency => Boolean(competency)),
+    );
+  };
 
   const addGoal = (example?: OkrExample) => {
     if (goalsLeft <= 0) return;
@@ -498,13 +539,22 @@ export function CharterEditor({
 
   const message = saveState.message ?? sendState.message ?? null;
   const error = saveState.error ?? sendState.error ?? null;
+  const libraryError = !libraryLoaded
+    ? "The competency library has not been loaded into this workspace yet, so competency commitments cannot be saved. An administrator loads it from Cycles & settings."
+    : null;
+  const errorMessage = error ?? libraryError;
+  const [errorDialogOpen, setErrorDialogOpen] = useState(Boolean(errorMessage));
+
+  useEffect(() => {
+    if (errorMessage) setErrorDialogOpen(true);
+  }, [errorMessage]);
 
   return (
     <form action={saveAction} className="space-y-10">
       <input type="hidden" name="goals" value={goalsPayload} />
       <input type="hidden" name="competencies" value={competenciesPayload} />
 
-      <CharterApprovalStrip currentStep={status === "draft" ? 1 : 2} />
+      <CharterApprovalStrip currentStep={charterStepForStatus(status)} />
 
       <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -525,7 +575,27 @@ export function CharterEditor({
           </Badge>
           <Button type="submit" variant="outline" disabled={!editable || saving}>
             <Save />
-            {saving ? "Saving…" : "Save draft"}
+            {saving ? "Saving…" : approvedAndLocked ? "Save revision" : "Save draft"}
+          </Button>
+          {previousCharter && previousCycleName ? (
+            <Button type="button" variant="outline" onClick={copyPreviousCharter}>
+              <Copy />
+              Copy from {previousCycleName}
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            formAction={sendAction}
+            disabled={!canSend || sending}
+          >
+            <Send />
+            {sending
+              ? "Sending…"
+              : canSend
+                ? "Send to my coach"
+                : approvedAndLocked
+                  ? "Save revision first"
+                  : CHARTER_STATUS_LABELS[status]}
           </Button>
           {charter ? (
             <Button
@@ -540,20 +610,16 @@ export function CharterEditor({
         </div>
       </div>
 
-      {!libraryLoaded ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            The competency library has not been loaded into this workspace yet, so competency
-            commitments cannot be saved. An administrator loads it from Cycles &amp; settings.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <Dialog open={Boolean(errorMessage) && errorDialogOpen} onOpenChange={setErrorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Check your charter</DialogTitle>
+            <DialogDescription>{errorMessage}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
       {message && !error ? (
         <Alert>
           <AlertDescription>{message}</AlertDescription>
@@ -637,25 +703,14 @@ export function CharterEditor({
           title="Competencies"
           description={`${fixed.length} fixed for everyone, ${CHARTER_CHOSEN_COMPETENCIES} chosen with your coach. Each carries a one-line commitment.`}
           actions={
-            <>
-              {stillToChoose > 0 ? (
-                <Badge className="mr-1 border-amber-500/30 bg-amber-500/12 text-[0.65rem] uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
-                  {stillToChoose} still to choose
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="mr-1">
-                  All {fixed.length + CHARTER_CHOSEN_COMPETENCIES} set
-                </Badge>
-              )}
-              <CompetencyPickerDialog
-                taken={chosen.map((item) => item.name)}
-                disabled={stillToChoose <= 0 || !editable}
-                onPick={pickCompetency}
-              />
-            </>
+            <CompetencyPickerDialog
+              taken={chosen.map((item) => item.name)}
+              disabled={stillToChoose <= 0 || !editable}
+              onPick={pickCompetency}
+            />
           }
         />
-        <div className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-3">
           {[...fixed, ...chosen].map((competency, index) => (
             <CompetencyCard
               key={competency.name}
@@ -682,19 +737,25 @@ export function CharterEditor({
             { length: Math.max(stillToChoose, 0) },
             (_, slot) => fixed.length + chosen.length + slot + 1,
           ).map((position) => (
-            <Card key={`open-slot-${position}`} className="border-dashed bg-muted/30">
-              <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+            <Card
+              key={`open-slot-${position}`}
+              size="sm"
+              className="min-h-40 border-dashed bg-muted/30"
+            >
+              <CardContent className="flex h-full flex-1 flex-col justify-between gap-4">
+                <div className="min-w-0">
                   <Eyebrow>Competency {position} &middot; Chosen with your coach</Eyebrow>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-2 text-[0.8125rem] leading-5 text-muted-foreground">
                     Pick one from the library that matches the work of this cycle.
                   </p>
                 </div>
-                <CompetencyPickerDialog
-                  taken={chosen.map((item) => item.name)}
-                  disabled={!editable}
-                  onPick={pickCompetency}
-                />
+                <div className="flex justify-end">
+                  <CompetencyPickerDialog
+                    taken={chosen.map((item) => item.name)}
+                    disabled={!editable}
+                    onPick={pickCompetency}
+                  />
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -702,10 +763,14 @@ export function CharterEditor({
       </section>
 
       <Card className={cn("bg-accent/40", !editable && "bg-primary/10")}>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent>
           <div>
             <p className="font-heading text-base font-semibold">
-              {editable ? "Ready to send?" : CHARTER_STATUS_LABELS[status]}
+              {editable
+                ? approvedAndLocked
+                  ? "Revise this charter"
+                  : "Ready to send?"
+                : CHARTER_STATUS_LABELS[status]}
             </p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Your coach reviews first &mdash; refining targets and checking measurability &mdash;
@@ -713,15 +778,6 @@ export function CharterEditor({
               cycle.
             </p>
           </div>
-          <Button
-            type="submit"
-            formAction={sendAction}
-            className="shrink-0"
-            disabled={!editable || sending || charter === null}
-          >
-            <Send />
-            {sending ? "Sending…" : editable ? "Send to my coach" : CHARTER_STATUS_LABELS[status]}
-          </Button>
         </CardContent>
       </Card>
     </form>

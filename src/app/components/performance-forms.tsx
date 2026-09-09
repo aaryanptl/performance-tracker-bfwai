@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { APPROVER_LABEL, CHECKIN_STAGES, RATINGS } from "@/data/performance";
+import { APPROVER_LABEL, CHECKIN_STAGES, RATINGS, SCORE_BANDS } from "@/data/performance";
 import type {
   CharterGoal,
   CheckInRecord,
@@ -492,6 +492,24 @@ interface ScoreDraft {
   evidenceNote: string;
 }
 
+/** Mirrors the database's fixed attainment bands for an in-form score preview. */
+function score1FromAttainment(average: number) {
+  if (average >= 0.95) return 5;
+  if (average >= 0.8) return 4;
+  if (average >= 0.65) return 3;
+  if (average >= 0.45) return 2;
+  return 1;
+}
+
+function ratingLabel(rating: number | null) {
+  if (rating === null) return "—";
+  return `${rating} — ${RATINGS.find((option) => option.value === rating)?.label ?? "Rating"}`;
+}
+
+function score1Band(rating: number | null) {
+  return SCORE_BANDS.find((band) => band.rating === rating)?.range ?? null;
+}
+
 export function ReviewForm({
   participantId,
   personName,
@@ -519,6 +537,9 @@ export function ReviewForm({
 
   const review = reviews.find((entry) => entry.quarterId === quarterId);
   const impact = impacts.find((entry) => entry.quarterId === quarterId);
+  const [competencyRating, setCompetencyRating] = useState(
+    review?.competencyRating ? String(review.competencyRating) : "",
+  );
 
   const [scores, setScores] = useState<ScoreDraft[]>(() =>
     goals.map((goal) => {
@@ -554,6 +575,10 @@ export function ReviewForm({
     );
   }, [goals, review]);
 
+  useEffect(() => {
+    setCompetencyRating(review?.competencyRating ? String(review.competencyRating) : "");
+  }, [review]);
+
   const payload = JSON.stringify(
     scores.map((score) => ({
       charterGoalId: score.charterGoalId,
@@ -562,6 +587,31 @@ export function ReviewForm({
       evidenceNote: score.evidenceNote,
     })),
   );
+
+  const scoredAttainments = scores
+    .filter((score) => score.attainment.trim() !== "")
+    .map((score) => Number(score.attainment))
+    .filter((attainment) => Number.isFinite(attainment));
+  const liveAttainmentAverage =
+    scoredAttainments.length > 0
+      ? scoredAttainments.reduce((sum, attainment) => sum + attainment, 0) /
+        scoredAttainments.length
+      : (review?.goalAttainmentAverage ?? null);
+  const liveScore1 =
+    liveAttainmentAverage !== null
+      ? score1FromAttainment(liveAttainmentAverage)
+      : (review?.okrRating ?? null);
+  const liveScore2 = competencyRating ? Number(competencyRating) : null;
+  const liveQuarterlyScore =
+    liveScore1 !== null && liveScore2 !== null
+      ? Math.round((liveScore1 * okrWeight + liveScore2 * competencyWeight) * 100) / 100
+      : null;
+  const calculatedQuarterlyScore = liveQuarterlyScore ?? review?.quarterlyScore ?? null;
+  const hasScorePreview =
+    liveScore1 !== null ||
+    liveScore2 !== null ||
+    review?.calibratedScore != null ||
+    review?.quarterlyScore != null;
 
   const patch = (goalId: number, next: Partial<ScoreDraft>) =>
     setScores((current) =>
@@ -597,7 +647,12 @@ export function ReviewForm({
             onValueChange={(value) => setQuarterId(Number(value ?? 0))}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {(value) =>
+                  quarters.find((quarter) => String(quarter.id) === value)?.name ??
+                  "Choose a quarter"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {quarters.map((quarter) => (
@@ -710,47 +765,90 @@ export function ReviewForm({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Quarterly score</CardTitle>
-          <CardDescription>
-            Quarterly score = (Score 1 × {okrWeight}) + (Score 2 × {competencyWeight}). Leadership
-            may calibrate it before release.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-2">
-            <div className="flex h-3 overflow-hidden rounded-full bg-muted">
-              <div className="bg-primary" style={{ width: `${okrWeight * 100}%` }} />
-              <div className="bg-secondary" style={{ width: `${competencyWeight * 100}%` }} />
+      {hasScorePreview ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quarterly score</CardTitle>
+            <CardDescription>
+              Quarterly score = (Score 1 × {okrWeight}) + (Score 2 × {competencyWeight}). Leadership
+              may calibrate it before release.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="font-medium">How this score is calculated</p>
+              <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Score 1 from goal attainment</p>
+                  <p className="mt-1 font-medium">
+                    {liveAttainmentAverage !== null
+                      ? `Average ${liveAttainmentAverage.toFixed(2)} → ${ratingLabel(liveScore1)}`
+                      : "Enter goal attainment to calculate Score 1."}
+                  </p>
+                  {score1Band(liveScore1) ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {liveAttainmentAverage?.toFixed(2)} falls in the {score1Band(liveScore1)}{" "}
+                      band.
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Quarterly score</p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {liveScore1 !== null && liveScore2 !== null && calculatedQuarterlyScore !== null
+                      ? `(${liveScore1} × ${okrWeight}) + (${liveScore2} × ${competencyWeight}) = ${calculatedQuarterlyScore.toFixed(2)}`
+                      : "Select Score 1 and Score 2 to calculate the quarterly score."}
+                  </p>
+                </div>
+              </div>
+              {review?.calibratedScore !== null && review?.calibratedScore !== undefined ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  <span>Leadership calibration overrides the calculated score with </span>
+                  {review.calibratedScore.toFixed(2)}.
+                </p>
+              ) : null}
             </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Score 1 · {Math.round(okrWeight * 100)}%</span>
-              <span>Score 2 · {Math.round(competencyWeight * 100)}%</span>
+            <div className="grid gap-2">
+              <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+                <div className="bg-primary" style={{ width: `${okrWeight * 100}%` }} />
+                <div className="bg-secondary" style={{ width: `${competencyWeight * 100}%` }} />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Score 1 · {Math.round(okrWeight * 100)}%</span>
+                <span>Score 2 · {Math.round(competencyWeight * 100)}%</span>
+              </div>
             </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Score 1</p>
-              <p className="mt-1 text-lg font-semibold">{review?.okrRating ?? "—"}</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Score 1 · recommended</p>
+                <p className="mt-1 text-lg font-semibold">{ratingLabel(liveScore1)}</p>
+                {score1Band(liveScore1) ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Attainment band: {score1Band(liveScore1)}
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Score 2</p>
+                <p className="mt-1 text-lg font-semibold">{ratingLabel(liveScore2)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  {review?.calibratedScore !== null && review?.calibratedScore !== undefined
+                    ? "Calibrated score"
+                    : "Calculated score"}
+                </p>
+                <p className="mt-1 text-lg font-semibold">
+                  {review?.calibratedScore?.toFixed(2) ??
+                    liveQuarterlyScore?.toFixed(2) ??
+                    review?.quarterlyScore?.toFixed(2) ??
+                    "—"}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Score 2</p>
-              <p className="mt-1 text-lg font-semibold">{review?.competencyRating ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">
-                {review?.calibratedScore !== null && review?.calibratedScore !== undefined
-                  ? "Calibrated score"
-                  : "Calculated score"}
-              </p>
-              <p className="mt-1 text-lg font-semibold">
-                {review?.calibratedScore?.toFixed(2) ?? review?.quarterlyScore?.toFixed(2) ?? "—"}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card key={`score-2-${quarterId}`}>
         <CardHeader>
@@ -765,12 +863,15 @@ export function ReviewForm({
             <Label htmlFor="competency_rating">Rating for {personName}</Label>
             <Select
               className="w-full sm:w-80"
-              defaultValue={review?.competencyRating ? String(review.competencyRating) : ""}
               disabled={readOnly}
               name="competency_rating"
+              onValueChange={(value) => setCompetencyRating(value ?? "")}
+              value={competencyRating}
             >
               <SelectTrigger id="competency_rating">
-                <SelectValue />
+                <SelectValue>
+                  {(value) => (value ? ratingLabel(Number(value)) : "Not yet rated")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Not yet rated</SelectItem>
@@ -843,10 +944,10 @@ export function ReviewForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Signatures and calibration</CardTitle>
+          <CardTitle>Signatures and release</CardTitle>
           <CardDescription>
-            The coach sends the review to calibration; Leadership signs off before it is released to
-            the team member.
+            Leadership may calibrate the score before release, or release the completed review
+            directly to the team member.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">

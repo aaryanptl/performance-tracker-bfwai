@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { PageHeader } from "@/app/components/page-header";
 import { RatingTraps } from "@/app/components/rating-traps";
 import { ScoringGuideDialog } from "@/app/components/scoring-guide-dialog";
@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SCORE_BANDS } from "@/data/performance";
-import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getVisibleParticipants } from "@/lib/data/cycle";
 import { REVIEW_STATUS_LABELS } from "@/lib/data/performance-types";
 import { getPersonRecord } from "@/lib/data/person-record";
 import { getViewer } from "@/lib/data/viewer";
@@ -33,7 +33,7 @@ export default async function ScoringPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participants = cycle ? await getVisibleParticipants(viewer.supabase, cycle.id) : [];
   const scoreable = viewer.isAdmin
     ? participants
@@ -53,37 +53,6 @@ export default async function ScoringPage() {
         description="The full review and feedback session happens at the half-year — do not confuse the two. Read the Impact Statement first, verify it against the data sources and your check-in records, then score."
         action={<ScoringGuideDialog />}
       />
-      <div className="mb-6 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>How to work down the screen</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <ol className="grid list-decimal gap-2 pl-5 text-sm leading-6 text-muted-foreground marker:text-muted-foreground">
-              {STEPS.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-            <p className="text-sm leading-6">
-              <span className="font-medium">Bands:</span>{" "}
-              <span className="text-muted-foreground">
-                {SCORE_BANDS.map((band) => `${band.range} → ${band.rating}`).join(" · ")}
-              </span>
-            </p>
-            <p className="text-sm leading-6">
-              <span className="font-medium">
-                Quarterly score = (Score 1 × {cycle?.okrWeight ?? 0.6}) + (Score 2 ×{" "}
-                {cycle?.competencyWeight ?? 0.4})
-              </span>
-              <span className="text-muted-foreground">
-                , calibrated across all coaches before release.
-              </span>
-            </p>
-          </CardContent>
-        </Card>
-        <RatingTraps />
-      </div>
-
       {!cycle || records.length === 0 ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
@@ -95,21 +64,65 @@ export default async function ScoringPage() {
       ) : (
         cycle.quarters.map((quarter) => (
           <section key={quarter.id} className="mb-6">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <h2 className="font-heading text-lg font-semibold">{quarter.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  Score by{" "}
-                  {new Intl.DateTimeFormat("en-GB", {
-                    dateStyle: "medium",
-                    timeZone: "UTC",
-                  }).format(
-                    new Date(`${quarter.scoringDueAt?.slice(0, 10) ?? quarter.endDate}T00:00:00Z`),
-                  )}
-                  {quarter.isFullReview ? " · full review quarter" : ""}
-                </p>
-              </div>
-            </div>
+            {(() => {
+              const csvRows = [
+                [
+                  "Person",
+                  "Email",
+                  "Title",
+                  "Impact statement",
+                  "Goals scored",
+                  "Goals total",
+                  "Score 1",
+                  "Score 2",
+                  "Quarterly score",
+                  "Status",
+                ],
+                ...records.map(({ participant, record }) => {
+                  const review = record?.reviews.find((entry) => entry.quarterId === quarter.id);
+                  const statement = record?.impactStatements.find(
+                    (entry) => entry.quarterId === quarter.id,
+                  );
+                  return [
+                    participant.personName,
+                    participant.personEmail,
+                    participant.title,
+                    statement?.submittedAt ? "Shared" : "Not shared",
+                    review?.goalScores.length ?? 0,
+                    record?.charter?.goals.length ?? 0,
+                    review?.okrRating ?? "",
+                    review?.competencyRating ?? "",
+                    review?.calibratedScore ?? review?.quarterlyScore ?? "",
+                    review ? REVIEW_STATUS_LABELS[review.status] : "Not started",
+                  ];
+                }),
+              ];
+
+              return (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="font-heading text-lg font-semibold">{quarter.name}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Score by{" "}
+                      {new Intl.DateTimeFormat("en-GB", {
+                        dateStyle: "medium",
+                        timeZone: "UTC",
+                      }).format(
+                        new Date(
+                          `${quarter.scoringDueAt?.slice(0, 10) ?? quarter.endDate}T00:00:00Z`,
+                        ),
+                      )}
+                      {quarter.isFullReview ? " · full review quarter" : ""}
+                    </p>
+                  </div>
+                  <CsvDownloadButton
+                    filename={`ascend-${quarter.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-scoring.csv`}
+                    rows={csvRows}
+                    label="Download CSV"
+                  />
+                </div>
+              );
+            })()}
             <Card>
               <CardContent className="px-0">
                 <div className="overflow-x-auto">
@@ -186,6 +199,37 @@ export default async function ScoringPage() {
           </section>
         ))
       )}
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>How to work down the screen</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <ol className="grid list-decimal gap-2 pl-5 text-sm leading-6 text-muted-foreground marker:text-muted-foreground">
+              {STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="text-sm leading-6">
+              <span className="font-medium">Bands:</span>{" "}
+              <span className="text-muted-foreground">
+                {SCORE_BANDS.map((band) => `${band.range} → ${band.rating}`).join(" · ")}
+              </span>
+            </p>
+            <p className="text-sm leading-6">
+              <span className="font-medium">
+                Quarterly score = (Score 1 × {cycle?.okrWeight ?? 0.6}) + (Score 2 ×{" "}
+                {cycle?.competencyWeight ?? 0.4})
+              </span>
+              <span className="text-muted-foreground">
+                . Leadership can calibrate the score before release when needed.
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+        <RatingTraps />
+      </div>
     </>
   );
 }

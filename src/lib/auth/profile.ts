@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { getRequestClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Person, Role } from "@/lib/types";
 
 interface ProfileRow {
@@ -19,6 +20,9 @@ const EMPLOYMENT: Record<ProfileRow["employment_type"], Person["employment"]> = 
   contractor: "Contractor",
 };
 
+const PROFILE_SELECT =
+  "id, source_key, work_email, display_name, title, unit_id, job_level, employment_type, authority_role";
+
 /**
  * The application id for a roster row. `source_key` carries the id the seeded
  * roster and its records already use; a person added through the people page
@@ -33,16 +37,61 @@ function personId(id: number, sourceKey: string | null) {
  * made on the people page — unit, level, authority, coach — is the change this
  * session sees.
  */
-export async function getPersonForAuthUser(authUserId: string): Promise<Person | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+export async function getPersonForAuthUser(
+  authUserId: string,
+  authUserEmail: string | null = null,
+): Promise<Person | null> {
+  const supabase = await getRequestClient();
+  let { data, error } = await supabase
     .from("people")
-    .select(
-      "id, source_key, work_email, display_name, title, unit_id, job_level, employment_type, authority_role",
-    )
+    .select(PROFILE_SELECT)
     .eq("auth_user_id", authUserId)
     .eq("active", true)
     .maybeSingle<ProfileRow>();
+
+  // Google can create an Auth user before the roster invite action has linked
+  // it. Recover only an active, unlinked row with one exact, case-insensitive
+  // email match; never link by editable user metadata.
+  if (!error && !data && authUserEmail?.trim()) {
+    try {
+      const admin = createAdminClient();
+      const normalizedEmail = authUserEmail.trim().toLowerCase();
+      const escapedEmail = normalizedEmail
+        .replaceAll("\\", "\\\\")
+        .replaceAll("%", "\\%")
+        .replaceAll("_", "\\_");
+      const { data: matches, error: matchError } = await admin
+        .from("people")
+        .select(PROFILE_SELECT)
+        .is("auth_user_id", null)
+        .eq("active", true)
+        .ilike("work_email", escapedEmail)
+        .limit(2)
+        .returns<ProfileRow[]>();
+
+      if (matchError) {
+        console.error(`[auth] Pending profile lookup failed for ${authUserId}:`, matchError.message);
+      } else if (matches.length === 1) {
+        const { data: linked, error: linkError } = await admin
+          .from("people")
+          .update({ auth_user_id: authUserId })
+          .eq("id", matches[0].id)
+          .is("auth_user_id", null)
+          .select(PROFILE_SELECT)
+          .maybeSingle<ProfileRow>();
+
+        if (linkError) {
+          console.error(`[auth] Profile auto-link failed for ${authUserId}:`, linkError.message);
+        } else if (linked) {
+          data = linked;
+        }
+      } else if (matches.length > 1) {
+        console.error(`[auth] Multiple pending profiles match ${authUserId}; refusing auto-link.`);
+      }
+    } catch (linkSetupError) {
+      console.error(`[auth] Profile auto-link is not configured for ${authUserId}:`, linkSetupError);
+    }
+  }
 
   // A failed query usually means schema drift (missing migration); a missing
   // row means the account was never linked to the roster. Log both loudly —

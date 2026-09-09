@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,9 +61,66 @@ export function ParticipantTable({
           ? `/coaching/coachees/${participant.id}`
           : `/records/${participant.id}`;
 
+  const csvRows = [
+    [
+      "Name",
+      "Email",
+      "Title",
+      "Unit",
+      "Level",
+      "Coach",
+      ...(summaries
+        ? [
+            "Charter",
+            "Check-ins",
+            ...(periods?.map((period) => period.name) ?? []),
+            "Impact",
+            "Score",
+          ]
+        : []),
+    ],
+    ...participants.map((participant) => {
+      const summary = summaries?.[participant.id];
+      return [
+        participant.personName,
+        participant.personEmail,
+        participant.title,
+        participant.unitName,
+        participant.jobLevel,
+        participant.coachName ?? "",
+        ...(summaries
+          ? [
+              summary?.charterStatus ?? `${summary?.goalCount ?? 0} goals`,
+              `${summary?.checkInCount ?? 0}/${summary?.checkInTarget ?? 6}`,
+              ...(periods?.map((period) => summary?.quarterScores?.[period.id] ?? "") ?? []),
+              periods?.length
+                ? periods
+                    .filter((period) => summary?.impactPeriods?.[period.id])
+                    .map((period) => period.name)
+                    .join("; ")
+                : (summary?.impactCount ?? 0),
+              summary?.latestScore ?? "",
+            ]
+          : []),
+      ];
+    }),
+  ];
+
+  const filename =
+    action === "check-in"
+      ? "ascend-check-ins-people.csv"
+      : action === "review"
+        ? "ascend-scoring-people.csv"
+        : action === "coachee"
+          ? "ascend-coachees.csv"
+          : "ascend-records-people.csv";
+
   return (
     <Card className="min-w-0">
       <CardContent className="min-w-0 px-0">
+        <div className="flex justify-end px-4 pt-4">
+          <CsvDownloadButton filename={filename} rows={csvRows} label="Download table CSV" />
+        </div>
         <div className="min-w-0">
           <Table>
             <TableHeader>

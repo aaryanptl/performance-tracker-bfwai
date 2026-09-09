@@ -144,6 +144,20 @@ export function buildExports(records: PersonRecord[]) {
     ]),
   ]);
 
+  const developmentActions = rows([
+    ["Person", "Action", "Support type", "Due date", "Status", "Completed"],
+    ...records.flatMap((record) =>
+      record.developmentActions.map((action) => [
+        record.participant.personName,
+        action.actionText,
+        action.supportType ?? "",
+        action.dueDate ? formatDate(action.dueDate) : "",
+        action.status,
+        action.completedAt ? formatDate(action.completedAt) : "",
+      ]),
+    ),
+  ]);
+
   return {
     people,
     charters,
@@ -151,6 +165,7 @@ export function buildExports(records: PersonRecord[]) {
     impact,
     scores,
     transcript,
+    developmentActions,
     backup: JSON.stringify({ generatedAt: new Date().toISOString(), records }, null, 2),
   };
 }

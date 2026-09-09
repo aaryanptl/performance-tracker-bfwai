@@ -1,8 +1,10 @@
+import { cache } from "react";
+
 import type { AuthorityRole } from "@/lib/data/roster-fields";
 import { isAdminAuthority } from "@/lib/data/roster-fields";
-import { createClient } from "@/lib/supabase/server";
+import { getRequestClient } from "@/lib/supabase/server";
 
-export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+export type SupabaseClient = Awaited<ReturnType<typeof getRequestClient>>;
 
 export interface Viewer {
   supabase: SupabaseClient;
@@ -21,8 +23,8 @@ export interface Viewer {
  * only resolves identity so a caller can shape a page or return a sentence
  * instead of surfacing a policy refusal.
  */
-export async function getViewer(): Promise<Viewer | null> {
-  const supabase = await createClient();
+export const getViewer = cache(async (): Promise<Viewer | null> => {
+  const supabase = await getRequestClient();
   const { data: claims } = await supabase.auth.getClaims();
   const authUserId = claims?.claims?.sub;
   if (!authUserId) return null;
@@ -49,4 +51,4 @@ export async function getViewer(): Promise<Viewer | null> {
     isAdmin: isAdminAuthority(data.authority_role),
     name: data.display_name,
   };
-}
+});

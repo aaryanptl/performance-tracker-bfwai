@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -23,3 +25,6 @@ export async function createClient() {
     },
   });
 }
+
+/** Reuse one cookie-bound Supabase client throughout a server render. */
+export const getRequestClient = cache(createClient);

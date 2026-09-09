@@ -1,7 +1,7 @@
 import { CalendarCheck2, ClipboardCheck, Goal, ShieldCheck, Trophy } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { MetricCard } from "@/app/components/metric-card";
 import { PageHeader } from "@/app/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -87,6 +87,52 @@ export default async function AdminDashboardPage() {
       (review) => Math.round(review.calibratedScore ?? review.quarterlyScore ?? 0) === band,
     ).length,
   }));
+
+  const coachLoadRows = [
+    [
+      "Coach",
+      "Coachees",
+      "Check-ins recorded",
+      "Check-in target",
+      "Charters signed",
+      "Scores signed",
+    ],
+    ...[...coaches.values()].map((entry) => [
+      entry.name,
+      entry.coachees,
+      entry.checkIns,
+      entry.coachees * CHECK_INS_PER_PERSON,
+      entry.charters,
+      entry.scores,
+    ]),
+  ];
+  const overviewRows = [
+    [
+      "Person",
+      "Email",
+      "Title",
+      "Unit",
+      "Coach",
+      "Charter",
+      "Check-ins",
+      ...(cycle?.quarters.map((quarter) => quarter.name) ?? []),
+      "Half-yearly",
+    ],
+    ...records.map((record) => [
+      record.participant.personName,
+      record.participant.personEmail,
+      record.participant.title,
+      record.participant.unitName,
+      record.participant.coachName ?? "",
+      record.charter ? CHARTER_STATUS_LABELS[record.charter.status] : "Not started",
+      `${record.checkIns.filter((checkIn) => checkIn.notes !== null).length} / 6`,
+      ...(cycle?.quarters.map((quarter) => {
+        const review = record.reviews.find((entry) => entry.quarterId === quarter.id);
+        return review?.calibratedScore ?? review?.quarterlyScore ?? "";
+      }) ?? []),
+      halfYearScore(record.reviews) ?? "",
+    ]),
+  ];
 
   return (
     <>
@@ -188,12 +234,19 @@ export default async function AdminDashboardPage() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Coach load and completion</CardTitle>
-          <CardDescription>
-            Six to eight coachees is a workable load at 15 minutes a month each plus quarterly
-            scoring.
-          </CardDescription>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Coach load and completion</CardTitle>
+            <CardDescription>
+              Six to eight coachees is a workable load at 15 minutes a month each plus quarterly
+              scoring.
+            </CardDescription>
+          </div>
+          <CsvDownloadButton
+            filename="ascend-coach-load.csv"
+            rows={coachLoadRows}
+            label="Download CSV"
+          />
         </CardHeader>
         <CardContent className="px-0">
           <div className="overflow-x-auto">
@@ -244,7 +297,14 @@ export default async function AdminDashboardPage() {
               records and downloads pages.
             </CardDescription>
           </div>
-          <Badge variant="outline">{cycle?.name ?? "No cycle"}</Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <CsvDownloadButton
+              filename="ascend-programme-overview.csv"
+              rows={overviewRows}
+              label="Download CSV"
+            />
+            <Badge variant="outline">{cycle?.name ?? "No cycle"}</Badge>
+          </div>
         </CardHeader>
         <CardContent className="px-0">
           <div className="overflow-x-auto">

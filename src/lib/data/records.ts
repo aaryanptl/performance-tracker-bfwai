@@ -25,6 +25,8 @@ interface CharterRow {
   submitted_at: string | null;
   coach_reviewed_at: string | null;
   founder_approved_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface GoalRow {
@@ -71,7 +73,7 @@ export async function getCharter(
   const { data: row } = await supabase
     .from("goal_charters")
     .select(
-      "id, cycle_participant_id, version, cycle_intent, context, status, submitted_at, coach_reviewed_at, founder_approved_at",
+      "id, cycle_participant_id, version, cycle_intent, context, status, submitted_at, coach_reviewed_at, founder_approved_at, created_at, updated_at",
     )
     .eq("cycle_participant_id", participantId)
     .order("version", { ascending: false })
@@ -80,6 +82,27 @@ export async function getCharter(
 
   if (!row) return null;
 
+  return loadCharter(supabase, row);
+}
+
+/** Every saved charter version, newest first, for the change-history view. */
+export async function getCharterHistory(
+  supabase: SupabaseClient,
+  participantId: number,
+): Promise<Charter[]> {
+  const { data: rows } = await supabase
+    .from("goal_charters")
+    .select(
+      "id, cycle_participant_id, version, cycle_intent, context, status, submitted_at, coach_reviewed_at, founder_approved_at, created_at, updated_at",
+    )
+    .eq("cycle_participant_id", participantId)
+    .order("version", { ascending: false })
+    .returns<CharterRow[]>();
+
+  return Promise.all((rows ?? []).map((row) => loadCharter(supabase, row)));
+}
+
+async function loadCharter(supabase: SupabaseClient, row: CharterRow): Promise<Charter> {
   const [goals, competencies, decisions] = await Promise.all([
     supabase
       .from("charter_goals")
@@ -109,6 +132,8 @@ export async function getCharter(
     id: row.id,
     participantId: row.cycle_participant_id,
     version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     cycleIntent: row.cycle_intent,
     context: row.context,
     status: row.status,

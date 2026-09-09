@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import type {
   AuthorityRole,
   EmploymentType,
@@ -6,7 +8,7 @@ import type {
   RosterUnit,
 } from "@/lib/data/roster-fields";
 import { isAdminAuthority } from "@/lib/data/roster-fields";
-import { createClient } from "@/lib/supabase/server";
+import { getRequestClient } from "@/lib/supabase/server";
 
 interface PersonRow {
   id: number;
@@ -27,8 +29,8 @@ interface PersonRow {
  * scopes `people` to the caller's organisation, so no organisation filter is
  * repeated here — anyone else simply reads a roster they cannot write to.
  */
-export async function getRoster(): Promise<Roster> {
-  const supabase = await createClient();
+export const getRoster = cache(async (): Promise<Roster> => {
+  const supabase = await getRequestClient();
   const { data: claims } = await supabase.auth.getClaims();
   const authUserId = claims?.claims?.sub ?? null;
 
@@ -54,16 +56,22 @@ export async function getRoster(): Promise<Roster> {
       .returns<{ coachee_id: number; coach_id: number }[]>(),
     supabase
       .from("cycles")
-      .select("id")
+      .select("id, name")
       .eq("status", "active")
       .order("id", { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: number }>(),
+      .maybeSingle<{ id: number; name: string }>(),
   ]);
 
   if (peopleResult.error) {
     console.error("[roster] People query failed:", peopleResult.error.message);
-    return { people: [], units: [], viewerId: null };
+    return {
+      people: [],
+      units: [],
+      currentCycle: cycleResult.data ?? null,
+      currentCycleParticipantIds: [],
+      viewerId: null,
+    };
   }
 
   const units = unitsResult.data ?? [];
@@ -80,11 +88,11 @@ export async function getRoster(): Promise<Roster> {
   if (cycleResult.data) {
     const { data: participants } = await supabase
       .from("cycle_participants")
-      .select("person_id, leader_id")
+      .select("person_id, leader_id, active")
       .eq("cycle_id", cycleResult.data.id)
-      .returns<{ person_id: number; leader_id: number | null }[]>();
+      .returns<{ person_id: number; leader_id: number | null; active: boolean }[]>();
     for (const participant of participants ?? []) {
-      leaderOf.set(participant.person_id, participant.leader_id);
+      if (participant.active) leaderOf.set(participant.person_id, participant.leader_id);
     }
   }
 
@@ -113,5 +121,11 @@ export async function getRoster(): Promise<Roster> {
 
   const viewer = authUserId ? rows.find((row) => row.auth_user_id === authUserId) : undefined;
 
-  return { people, units, viewerId: viewer?.id ?? null };
-}
+  return {
+    people,
+    units,
+    currentCycle: cycleResult.data ?? null,
+    currentCycleParticipantIds: [...leaderOf.keys()],
+    viewerId: viewer?.id ?? null,
+  };
+});

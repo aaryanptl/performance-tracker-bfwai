@@ -7,7 +7,7 @@ import { AcknowledgeCheckInButton } from "@/app/components/record-actions";
 import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getOwnParticipant } from "@/lib/data/cycle";
 import { CHECK_IN_STATUS_LABELS } from "@/lib/data/performance-types";
 import { getCheckIns } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
@@ -31,7 +31,7 @@ export default async function CheckInsPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participant = cycle
     ? await getOwnParticipant(viewer.supabase, cycle.id, viewer.personId)
     : null;

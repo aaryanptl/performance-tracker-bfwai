@@ -65,9 +65,8 @@ export function AddPersonDialog({
         <DialogHeader>
           <DialogTitle>Add a person to the roster</DialogTitle>
           <DialogDescription>
-            This creates the roster row. Sign-in credentials are issued separately by running
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">pnpm provision:users</code>,
-            which sends a temporary password to anyone who does not have an account yet.
+            This creates the roster row. After adding them, use Send invite in the roster to create
+            or link their Supabase Auth account.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={handleSubmit}>
@@ -76,7 +75,11 @@ export function AddPersonDialog({
             <Label htmlFor="add-coach">Coach</Label>
             <Select className="w-full" defaultValue="" name="coachId">
               <SelectTrigger id="add-coach">
-                <SelectValue />
+                <SelectValue>
+                  {(value) =>
+                    coaches.find((coach) => String(coach.id) === value)?.name ?? "Assign later"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Assign later</SelectItem>

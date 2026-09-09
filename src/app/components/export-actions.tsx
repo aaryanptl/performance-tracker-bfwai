@@ -1,27 +1,22 @@
 "use client";
 
-import { BookOpen, Download, FileJson } from "lucide-react";
+import { BookOpen, FileJson } from "lucide-react";
 import Link from "next/link";
 
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { Button } from "@/components/ui/button";
 import type { ExportSet } from "@/lib/data/exports";
 
-function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
+function downloadJson(filename: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: "application/json;charset=utf-8" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = name;
+  anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/**
- * The downloads offered on the records page.
- *
- * Every file is built on the server from the records the caller may read, so
- * the button set can be decided purely on what is useful — the boundary has
- * already been applied to the contents.
- */
+/** Downloads built from the records the current viewer may already read. */
 export function ExportActions({
   exports: files,
   canDownloadAll,
@@ -29,59 +24,44 @@ export function ExportActions({
   exports: ExportSet;
   canDownloadAll: boolean;
 }) {
+  const csvFiles = [
+    { filename: "ascend-people.csv", content: files.people },
+    { filename: "ascend-charters.csv", content: files.charters },
+    { filename: "ascend-check-ins.csv", content: files.checkIns },
+    { filename: "ascend-impact.csv", content: files.impact },
+    { filename: "ascend-scores.csv", content: files.scores },
+    { filename: "ascend-transcript.csv", content: files.transcript },
+    { filename: "ascend-development-actions.csv", content: files.developmentActions },
+  ];
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button nativeButton={false} render={<Link href="/book/team" target="_blank" />}>
         <BookOpen />
         Record book
       </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-people.csv", files.people, "text/csv")}
-      >
-        <Download />
-        People CSV
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-charters.csv", files.charters, "text/csv")}
-      >
-        <Download />
-        Charters
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-check-ins.csv", files.checkIns, "text/csv")}
-      >
-        <Download />
-        Check-ins
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-impact.csv", files.impact, "text/csv")}
-      >
-        <Download />
-        Impact
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-scores.csv", files.scores, "text/csv")}
-      >
-        <Download />
-        Scores
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => download("ascend-transcript.csv", files.transcript, "text/csv")}
-      >
-        <Download />
-        Transcript
-      </Button>
+      <CsvDownloadButton files={csvFiles} label="All CSVs" />
+      <CsvDownloadButton filename="ascend-people.csv" content={files.people} label="People CSV" />
+      <CsvDownloadButton filename="ascend-charters.csv" content={files.charters} label="Charters" />
+      <CsvDownloadButton
+        filename="ascend-check-ins.csv"
+        content={files.checkIns}
+        label="Check-ins"
+      />
+      <CsvDownloadButton filename="ascend-impact.csv" content={files.impact} label="Impact" />
+      <CsvDownloadButton filename="ascend-scores.csv" content={files.scores} label="Scores" />
+      <CsvDownloadButton
+        filename="ascend-transcript.csv"
+        content={files.transcript}
+        label="Transcript"
+      />
+      <CsvDownloadButton
+        filename="ascend-development-actions.csv"
+        content={files.developmentActions}
+        label="Development actions"
+      />
       {canDownloadAll ? (
-        <Button
-          variant="outline"
-          onClick={() => download("ascend-backup.json", files.backup, "application/json")}
-        >
+        <Button variant="outline" onClick={() => downloadJson("ascend-backup.json", files.backup)}>
           <FileJson />
           JSON backup
         </Button>

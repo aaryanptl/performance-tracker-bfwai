@@ -59,6 +59,10 @@ function isContext(value: AdminContext | RosterActionResult): value is AdminCont
 function refresh() {
   revalidatePath("/admin/people");
   revalidatePath("/admin/dashboard");
+  revalidatePath("/charter");
+  revalidatePath("/charter/edit");
+  revalidatePath("/coaching/approvals");
+  revalidatePath("/");
 }
 
 function today() {
@@ -167,9 +171,9 @@ export async function assignCoach(
     console.error("[roster] Coach lookup failed:", currentError.message);
     return { error: "The current coach could not be read." };
   }
-  if (current && current.coach_id === coachId) return OK;
+  const assignmentChanged = !current || current.coach_id !== coachId;
 
-  if (current) {
+  if (assignmentChanged && current) {
     // An assignment may not end before it began, so a change made on the day a
     // line opened closes that line on its own start date.
     const closedOn = current.effective_from > today() ? current.effective_from : today();
@@ -183,7 +187,7 @@ export async function assignCoach(
     }
   }
 
-  if (coachId !== null) {
+  if (assignmentChanged && coachId !== null) {
     const { error } = await supabase.from("coach_assignments").insert({
       organization_id: organizationId,
       coachee_id: coacheeId,
@@ -195,6 +199,40 @@ export async function assignCoach(
       console.error("[roster] Coach assignment failed:", error.message);
       refresh();
       return { error: "The new coach could not be assigned, so this person now has no coach." };
+    }
+  }
+
+  // The active cycle stores the coach snapshot used by the approvals queue and
+  // its RLS policies. Keep that snapshot in sync when the standing assignment
+  // changes after the person was already enrolled in the cycle.
+  const { data: activeCycle, error: activeCycleError } = await supabase
+    .from("cycles")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .order("start_date", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number }>();
+
+  if (activeCycleError) {
+    console.error("[roster] Active cycle lookup failed:", activeCycleError.message);
+    return { error: "The coach changed, but the active cycle could not be updated." };
+  }
+
+  if (activeCycle) {
+    const { error: participantError } = await supabase
+      .from("cycle_participants")
+      .update({ coach_id: coachId })
+      .eq("cycle_id", activeCycle.id)
+      .eq("person_id", coacheeId);
+
+    if (participantError) {
+      console.error(
+        "[roster] Active cycle coach snapshot update failed:",
+        participantError.message,
+      );
+      return { error: "The coach changed, but the active cycle could not be updated." };
     }
   }
 
@@ -239,6 +277,213 @@ export async function assignLeader(
   }
   if (!updated) {
     return { error: "This person is not enrolled in the current cycle." };
+  }
+
+  refresh();
+  return OK;
+}
+
+/** Add an active roster member to the current cycle with historical snapshots. */
+export async function enrollPersonInCurrentCycle(personId: number): Promise<RosterActionResult> {
+  const context = await adminContext();
+  if (!isContext(context)) return context;
+  if (!Number.isInteger(personId) || personId <= 0) {
+    return { error: "Choose a valid roster member." };
+  }
+
+  const { supabase, organizationId } = context;
+  const { data: cycle, error: cycleError } = await supabase
+    .from("cycles")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number; name: string }>();
+
+  if (cycleError || !cycle) {
+    return { error: "There is no active cycle to enrol this person in." };
+  }
+
+  const { data: person, error: personError } = await supabase
+    .from("people")
+    .select("id, title, job_level, employment_type, unit_id, active")
+    .eq("id", personId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<{
+      id: number;
+      title: string;
+      job_level: number;
+      employment_type: string;
+      unit_id: number | null;
+      active: boolean;
+    }>();
+
+  if (personError || !person) return { error: "That roster member could not be found." };
+  if (!person.active) return { error: "Restore this person’s roster access before enrolling them." };
+
+  const { data: existing, error: existingError } = await supabase
+    .from("cycle_participants")
+    .select("id, active")
+    .eq("cycle_id", cycle.id)
+    .eq("person_id", person.id)
+    .maybeSingle<{ id: number; active: boolean }>();
+
+  if (existingError) return { error: "The current cycle access could not be checked." };
+  if (existing) {
+    if (existing.active) return OK;
+    const { error } = await supabase
+      .from("cycle_participants")
+      .update({ active: true })
+      .eq("id", existing.id);
+    if (error) return { error: `Cycle access could not be restored: ${error.message}` };
+    refresh();
+    return OK;
+  }
+
+  const { data: assignment } = await supabase
+    .from("coach_assignments")
+    .select("coach_id")
+    .eq("coachee_id", person.id)
+    .is("effective_to", null)
+    .maybeSingle<{ coach_id: number }>();
+
+  const { error: insertError } = await supabase.from("cycle_participants").insert({
+    cycle_id: cycle.id,
+    person_id: person.id,
+    coach_id: assignment?.coach_id ?? null,
+    leader_id: null,
+    unit_id: person.unit_id,
+    title_snapshot: person.title,
+    job_level_snapshot: person.job_level,
+    employment_type_snapshot: person.employment_type,
+    active: true,
+  });
+
+  if (insertError) {
+    if (insertError.code === "23505") return OK;
+    return { error: `The person could not be enrolled: ${insertError.message}` };
+  }
+
+  refresh();
+  return OK;
+}
+
+/** Add every active roster member to the current cycle without changing existing access. */
+export async function enrollAllPeopleInCurrentCycle(): Promise<RosterActionResult> {
+  const context = await adminContext();
+  if (!isContext(context)) return context;
+  const { supabase, organizationId } = context;
+
+  const { data: cycle, error: cycleError } = await supabase
+    .from("cycles")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number; name: string }>();
+
+  if (cycleError || !cycle) {
+    return { error: "There is no active cycle to enrol people in." };
+  }
+
+  const [peopleResult, participantsResult] = await Promise.all([
+    supabase
+      .from("people")
+      .select("id, title, job_level, employment_type, unit_id")
+      .eq("organization_id", organizationId)
+      .eq("active", true)
+      .returns<
+        {
+          id: number;
+          title: string;
+          job_level: number;
+          employment_type: EmploymentType;
+          unit_id: number | null;
+        }[]
+      >(),
+    supabase
+      .from("cycle_participants")
+      .select("person_id, active")
+      .eq("cycle_id", cycle.id)
+      .returns<{ person_id: number; active: boolean }[]>(),
+  ]);
+
+  if (peopleResult.error || participantsResult.error) {
+    console.error(
+      "[roster] Bulk cycle access lookup failed:",
+      peopleResult.error?.message ?? participantsResult.error?.message,
+    );
+    return { error: "The roster or current cycle access could not be read." };
+  }
+
+  const people = peopleResult.data ?? [];
+  const existing = new Map(
+    (participantsResult.data ?? []).map((participant) => [
+      participant.person_id,
+      participant.active,
+    ]),
+  );
+  const missing = people.filter((person) => !existing.has(person.id));
+  const inactiveParticipantIds = people
+    .filter((person) => existing.get(person.id) === false)
+    .map((person) => person.id);
+
+  if (inactiveParticipantIds.length > 0) {
+    const { error } = await supabase
+      .from("cycle_participants")
+      .update({ active: true })
+      .eq("cycle_id", cycle.id)
+      .in("person_id", inactiveParticipantIds);
+    if (error) {
+      console.error("[roster] Bulk cycle access restore failed:", error.message);
+      return { error: "Existing cycle access could not be restored." };
+    }
+  }
+
+  if (missing.length === 0) {
+    if (inactiveParticipantIds.length > 0) refresh();
+    return OK;
+  }
+
+  const { data: assignments, error: assignmentError } = await supabase
+    .from("coach_assignments")
+    .select("coachee_id, coach_id")
+    .in(
+      "coachee_id",
+      missing.map((person) => person.id),
+    )
+    .is("effective_to", null)
+    .returns<{ coachee_id: number; coach_id: number }[]>();
+
+  if (assignmentError) {
+    console.error("[roster] Bulk coach lookup failed:", assignmentError.message);
+    return { error: "Current coach assignments could not be read." };
+  }
+
+  const coachOf = new Map(
+    (assignments ?? []).map((assignment) => [assignment.coachee_id, assignment.coach_id]),
+  );
+  const rows = missing.map((person) => ({
+    cycle_id: cycle.id,
+    person_id: person.id,
+    coach_id: coachOf.get(person.id) ?? null,
+    leader_id: null,
+    unit_id: person.unit_id,
+    title_snapshot: person.title,
+    job_level_snapshot: person.job_level,
+    employment_type_snapshot: person.employment_type,
+    active: true,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("cycle_participants")
+    .upsert(rows, { onConflict: "cycle_id,person_id", ignoreDuplicates: true });
+
+  if (insertError) {
+    console.error("[roster] Bulk cycle access insert failed:", insertError.message);
+    return { error: "The people could not be added to the current cycle." };
   }
 
   refresh();
@@ -306,26 +551,61 @@ export async function invitePerson(personId: number): Promise<RosterActionResult
     return { error: "Invite the person only after restoring their roster access." };
   if (person.auth_user_id) return { error: "This person already has a sign-in account." };
 
-  const admin = createAdminClient();
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    person.work_email.trim().toLowerCase(),
-    {
-      data: { display_name: person.display_name },
-      redirectTo: process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/signin`
-        : undefined,
-    },
-  );
-  if (inviteError || !invited.user) {
-    return { error: `The invite could not be sent: ${inviteError?.message ?? "unknown error"}` };
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (error) {
+    console.error("[roster] Invite setup failed:", error);
+    return {
+      error: "Invites are not configured. Add SUPABASE_SECRET_KEY to the server environment and restart the app.",
+    };
   }
 
-  const { error: linkError } = await supabase
+  const normalizedEmail = person.work_email.trim().toLowerCase();
+  const { data: usersPage, error: usersError } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  if (usersError) {
+    return { error: `The existing Auth accounts could not be checked: ${usersError.message}` };
+  }
+
+  const existingUser = usersPage.users.find(
+    (user) => user.email?.trim().toLowerCase() === normalizedEmail,
+  );
+  let authUserId = existingUser?.id;
+  let inviteSent = false;
+
+  if (!authUserId) {
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+      normalizedEmail,
+      {
+        data: { display_name: person.display_name },
+        redirectTo: process.env.NEXT_PUBLIC_SITE_URL
+          ? `${process.env.NEXT_PUBLIC_SITE_URL}/signin`
+          : undefined,
+      },
+    );
+    if (inviteError || !invited.user) {
+      return { error: `The invite could not be sent: ${inviteError?.message ?? "unknown error"}` };
+    }
+    authUserId = invited.user.id;
+    inviteSent = true;
+  }
+
+  const { data: linked, error: linkError } = await admin
     .from("people")
-    .update({ auth_user_id: invited.user.id, invited_at: new Date().toISOString() })
-    .eq("id", personId);
+    .update({
+      auth_user_id: authUserId,
+      ...(inviteSent ? { invited_at: new Date().toISOString() } : {}),
+    })
+    .eq("id", personId)
+    .is("auth_user_id", null)
+    .select("id")
+    .maybeSingle<{ id: number }>();
   if (linkError)
-    return { error: `The invite was sent, but the roster link failed: ${linkError.message}` };
+    return { error: `The Auth account exists, but the roster link failed: ${linkError.message}` };
+  if (!linked) return { error: "The Auth account exists, but the roster row could not be linked." };
 
   refresh();
   return { error: null };
@@ -372,7 +652,6 @@ export async function addPerson(
       ...input,
       organization_id: organizationId,
       source_key: sourceKey,
-      invited_at: new Date().toISOString(),
     })
     .select("id")
     .maybeSingle<{ id: number }>();

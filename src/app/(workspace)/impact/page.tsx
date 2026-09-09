@@ -5,7 +5,7 @@ import { PageHeader } from "@/app/components/page-header";
 import { ImpactForm } from "@/app/components/performance-forms";
 import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Card, CardContent } from "@/components/ui/card";
-import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getOwnParticipant } from "@/lib/data/cycle";
 import { getImpactStatements } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
 
@@ -13,7 +13,7 @@ export default async function ImpactPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participant = cycle
     ? await getOwnParticipant(viewer.supabase, cycle.id, viewer.personId)
     : null;

@@ -15,6 +15,7 @@ import {
   AUTHORITY_ROLES,
   EMPLOYMENT_LABELS,
   EMPLOYMENT_TYPES,
+  POSITION_OPTIONS,
   type RosterPerson,
   type RosterUnit,
 } from "@/lib/data/roster-fields";
@@ -34,6 +35,10 @@ export function PersonFormFields({
     person && !levels.includes(person.level)
       ? [...levels, person.level].sort((a, b) => a - b)
       : levels;
+  const positionOptions =
+    person?.title && !POSITION_OPTIONS.includes(person.title as (typeof POSITION_OPTIONS)[number])
+      ? [person.title, ...POSITION_OPTIONS]
+      : POSITION_OPTIONS;
 
   return (
     <div className="grid gap-4">
@@ -60,13 +65,18 @@ export function PersonFormFields({
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-title`}>Position</Label>
-        <Input
-          autoComplete="off"
-          defaultValue={person?.title ?? ""}
-          id={`${idPrefix}-title`}
-          name="title"
-          required
-        />
+        <Select className="w-full" defaultValue={person?.title ?? ""} name="title" required>
+          <SelectTrigger id={`${idPrefix}-title`}>
+            <SelectValue placeholder="Choose a position" />
+          </SelectTrigger>
+          <SelectContent>
+            {positionOptions.map((position) => (
+              <SelectItem key={position} value={position}>
+                {position}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-unit`}>Unit</Label>
@@ -77,7 +87,9 @@ export function PersonFormFields({
           required
         >
           <SelectTrigger id={`${idPrefix}-unit`}>
-            <SelectValue placeholder="Choose a unit" />
+            <SelectValue>
+              {(value) => units.find((unit) => String(unit.id) === value)?.name ?? "Choose a unit"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {units.map((unit) => (

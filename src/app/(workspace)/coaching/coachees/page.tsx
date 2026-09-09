@@ -4,7 +4,7 @@ import { CheckInFramework } from "@/app/components/check-in-framework";
 import { PageHeader } from "@/app/components/page-header";
 import { ParticipantTable, type ParticipantTableSummary } from "@/app/components/participant-table";
 import { RatingTraps } from "@/app/components/rating-traps";
-import { getActiveCycle, getVisibleParticipants } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getVisibleParticipants } from "@/lib/data/cycle";
 import { getPersonRecord } from "@/lib/data/person-record";
 import { getViewer } from "@/lib/data/viewer";
 
@@ -12,7 +12,7 @@ export default async function CoacheesPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participants = cycle ? await getVisibleParticipants(viewer.supabase, cycle.id) : [];
 
   // An administrator reads everyone; a coach reads themselves and their

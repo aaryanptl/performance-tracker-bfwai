@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { LIBRARY_COMPETENCIES } from "@/data/library";
 import { COACH_ADDON_UNIT } from "@/data/performance";
-import { getViewer } from "@/lib/data/viewer";
+import { getViewer, type SupabaseClient } from "@/lib/data/viewer";
 import { formatDate } from "@/lib/utils";
 
 export interface CycleActionResult {
@@ -23,6 +23,95 @@ function refresh() {
 
 function readDate(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+interface CycleEnrollmentSync {
+  error: string | null;
+  added: number;
+  restored: number;
+}
+
+/**
+ * Keep the active cycle aligned with the active roster. Existing snapshots are
+ * preserved; only missing rows are created and previously inactive rows are
+ * reactivated.
+ */
+async function syncCycleParticipants(
+  supabase: SupabaseClient,
+  organizationId: number,
+  cycleId: number,
+): Promise<CycleEnrollmentSync> {
+  const { data: people, error: peopleError } = await supabase
+    .from("people")
+    .select("id, title, job_level, employment_type, unit_id")
+    .eq("organization_id", organizationId)
+    .eq("active", true)
+    .returns<
+      {
+        id: number;
+        title: string;
+        job_level: number;
+        employment_type: string;
+        unit_id: number | null;
+      }[]
+    >();
+  if (peopleError) {
+    return { error: "The active roster could not be read.", added: 0, restored: 0 };
+  }
+
+  const [{ data: assignments }, { data: existing, error: existingError }] = await Promise.all([
+    supabase
+      .from("coach_assignments")
+      .select("coachee_id, coach_id")
+      .eq("organization_id", organizationId)
+      .is("effective_to", null)
+      .returns<{ coachee_id: number; coach_id: number }[]>(),
+    supabase
+      .from("cycle_participants")
+      .select("id, person_id, active")
+      .eq("cycle_id", cycleId)
+      .returns<{ id: number; person_id: number; active: boolean }[]>(),
+  ]);
+  if (existingError) {
+    return { error: "The existing cycle access could not be read.", added: 0, restored: 0 };
+  }
+
+  const existingByPerson = new Map((existing ?? []).map((row) => [row.person_id, row]));
+  const coachOf = new Map((assignments ?? []).map((row) => [row.coachee_id, row.coach_id]));
+  const inactiveIds = (existing ?? []).filter((row) => !row.active).map((row) => row.id);
+
+  if (inactiveIds.length > 0) {
+    const { error } = await supabase
+      .from("cycle_participants")
+      .update({ active: true })
+      .in("id", inactiveIds);
+    if (error) {
+      return { error: "Previously disabled cycle access could not be restored.", added: 0, restored: 0 };
+    }
+  }
+
+  const missing = (people ?? [])
+    .filter((person) => !existingByPerson.has(person.id))
+    .map((person) => ({
+      cycle_id: cycleId,
+      person_id: person.id,
+      coach_id: coachOf.get(person.id) ?? null,
+      leader_id: null,
+      unit_id: person.unit_id,
+      title_snapshot: person.title,
+      job_level_snapshot: person.job_level,
+      employment_type_snapshot: person.employment_type,
+      active: true,
+    }));
+
+  if (missing.length > 0) {
+    const { error } = await supabase.from("cycle_participants").insert(missing);
+    if (error) {
+      return { error: "New active roster members could not be enrolled.", added: 0, restored: 0 };
+    }
+  }
+
+  return { error: null, added: missing.length, restored: inactiveIds.length };
 }
 
 /** Update an existing cycle and keep its generated quarter dates in sync. */
@@ -338,51 +427,14 @@ export async function openCycle(
     return { error: `The quarters could not be created: ${quarterError.message}` };
   }
 
-  const { data: people } = await supabase
-    .from("people")
-    .select("id, title, job_level, employment_type, unit_id")
-    .eq("organization_id", organizationId)
-    .eq("active", true)
-    .returns<
-      {
-        id: number;
-        title: string;
-        job_level: number;
-        employment_type: string;
-        unit_id: number | null;
-      }[]
-    >();
-
-  const { data: assignments } = await supabase
-    .from("coach_assignments")
-    .select("coachee_id, coach_id")
-    .is("effective_to", null)
-    .returns<{ coachee_id: number; coach_id: number }[]>();
-
-  const coachOf = new Map((assignments ?? []).map((row) => [row.coachee_id, row.coach_id]));
-
-  const participants = (people ?? []).map((person) => ({
-    cycle_id: cycle.id,
-    person_id: person.id,
-    coach_id: coachOf.get(person.id) ?? null,
-    unit_id: person.unit_id,
-    title_snapshot: person.title,
-    job_level_snapshot: person.job_level,
-    employment_type_snapshot: person.employment_type,
-    active: true,
-  }));
-
-  if (participants.length > 0) {
-    const { error: participantError } = await supabase
-      .from("cycle_participants")
-      .insert(participants);
-    if (participantError) {
-      return { error: `The roster could not be enrolled: ${participantError.message}` };
-    }
-  }
+  const enrollment = await syncCycleParticipants(supabase, organizationId, cycle.id);
+  if (enrollment.error) return { error: enrollment.error };
 
   refresh();
-  return { error: null, message: `${participants.length} people enrolled in ${name}.` };
+  return {
+    error: null,
+    message: `${enrollment.added + enrollment.restored} people enrolled in ${name}.`,
+  };
 }
 
 /** Move a cycle between its lifecycle states (goal setting → active → closed). */
@@ -394,7 +446,19 @@ export async function setCycleStatus(
   if (!viewer) return { error: "Your session has expired. Sign in again." };
   if (!viewer.isAdmin) return { error: "Only an administrator can change the cycle." };
 
+  let enrollment: CycleEnrollmentSync | null = null;
   if (status === "active") {
+    const { data: targetCycle } = await viewer.supabase
+      .from("cycles")
+      .select("id")
+      .eq("id", cycleId)
+      .eq("organization_id", viewer.organizationId)
+      .maybeSingle<{ id: number }>();
+    if (!targetCycle) return { error: "That cycle is not available to you." };
+
+    enrollment = await syncCycleParticipants(viewer.supabase, viewer.organizationId, cycleId);
+    if (enrollment.error) return { error: enrollment.error };
+
     const { error: closeError } = await viewer.supabase
       .from("cycles")
       .update({ status: "closed" })
@@ -413,7 +477,43 @@ export async function setCycleStatus(
   if (error) return { error: `The cycle could not be updated: ${error.message}` };
 
   refresh();
+  if (enrollment && enrollment.added + enrollment.restored > 0) {
+    return {
+      error: null,
+      message: `${enrollment.added + enrollment.restored} active roster members now have access.`,
+    };
+  }
   return OK;
+}
+
+/** Repair access for an already-active cycle without changing its lifecycle state. */
+export async function syncActiveCycle(): Promise<CycleActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  if (!viewer.isAdmin) return { error: "Only an administrator can sync cycle access." };
+
+  const { data: cycle } = await viewer.supabase
+    .from("cycles")
+    .select("id")
+    .eq("organization_id", viewer.organizationId)
+    .eq("status", "active")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: number }>();
+  if (!cycle) return { error: "There is no active cycle to sync." };
+
+  const enrollment = await syncCycleParticipants(viewer.supabase, viewer.organizationId, cycle.id);
+  if (enrollment.error) return { error: enrollment.error };
+
+  refresh();
+  const changed = enrollment.added + enrollment.restored;
+  return {
+    error: null,
+    message:
+      changed === 0
+        ? "Roster access is already in sync."
+        : `${changed} active roster members now have access.`,
+  };
 }
 
 /** Remove only an unused cycle; historical cycles are closed, not deleted. */

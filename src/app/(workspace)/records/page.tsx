@@ -33,6 +33,10 @@ const CSV_EXPORTS = [
     "Every transcript entry attached to a check-in, impact statement, or quarterly review, with its author and timestamp.",
   ],
   [
+    "Development actions",
+    "Every development action assigned in a person's record, with support type, due date, status and completion date.",
+  ],
+  [
     "People and coaching map",
     "One row per person: name, email, title, unit, level, coach, charter status and the half-yearly score.",
   ],

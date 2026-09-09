@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,10 +92,27 @@ export function LibraryBrowser() {
           {objectives.map(([objective, examples]) => (
             <Card key={objective}>
               <CardHeader>
-                <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {examples[0].unit}
-                </p>
-                <CardTitle>{objective}</CardTitle>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                      {examples[0].unit}
+                    </p>
+                    <CardTitle>{objective}</CardTitle>
+                  </div>
+                  <CsvDownloadButton
+                    filename={`ascend-library-${examples[0].unit.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`}
+                    rows={[
+                      ["Objective", "Unit", "Key result", "Data source"],
+                      ...examples.map((example) => [
+                        example.objective,
+                        example.unit,
+                        example.kr,
+                        example.source,
+                      ]),
+                    ]}
+                    label="Download CSV"
+                  />
+                </div>
               </CardHeader>
               <CardContent className="px-0">
                 <Table>

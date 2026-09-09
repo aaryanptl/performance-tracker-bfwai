@@ -140,18 +140,19 @@ export async function saveCharter(
   const context = String(formData.get("context") ?? "").trim() || null;
 
   const existing = await getCharter(supabase, participant.id);
-  if (existing && !CHARTER_EDITABLE.includes(existing.status)) {
+  const reopeningApproved = existing?.status === "approved_locked";
+  if (existing && !reopeningApproved && !CHARTER_EDITABLE.includes(existing.status)) {
     return { error: "This charter is with a reviewer and cannot be edited right now." };
   }
 
-  let charterId = existing?.id ?? null;
+  let charterId: number;
 
-  if (charterId === null) {
+  if (!existing || reopeningApproved) {
     const { data, error } = await supabase
       .from("goal_charters")
       .insert({
         cycle_participant_id: participant.id,
-        version: 1,
+        version: (existing?.version ?? 0) + 1,
         cycle_intent: cycleIntent,
         context,
         status: "draft",
@@ -164,6 +165,7 @@ export async function saveCharter(
     }
     charterId = data.id;
   } else {
+    charterId = existing.id;
     const { error } = await supabase
       .from("goal_charters")
       .update({ cycle_intent: cycleIntent, context })
@@ -200,10 +202,15 @@ export async function saveCharter(
   }
 
   refresh();
-  return { error: null, message: "Charter saved." };
+  return {
+    error: null,
+    message: reopeningApproved
+      ? "Revision saved as a draft. Send it to your coach for review."
+      : "Charter saved.",
+  };
 }
 
-/** Send the charter to the coach. Editing reopens only if it is sent back. */
+/** Send the charter to the coach. Editing reopens if it is sent back or revised after approval. */
 export async function submitCharter(): Promise<CharterActionResult> {
   const viewer = await getViewer();
   if (!viewer) return { error: "Your session has expired. Sign in again." };

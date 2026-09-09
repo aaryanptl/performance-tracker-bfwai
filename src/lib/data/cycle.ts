@@ -1,9 +1,12 @@
+import { cache } from "react";
+
 import type {
   CycleSummary,
   ParticipantSummary,
   QuarterSummary,
 } from "@/lib/data/performance-types";
 import type { SupabaseClient } from "@/lib/data/viewer";
+import { getRequestClient } from "@/lib/supabase/server";
 
 interface CycleRow {
   id: number;
@@ -71,7 +74,7 @@ function chooseCurrent(cycles: CycleSummary[]) {
 }
 
 /** All cycles, newest first, for programme management. */
-export async function getCycles(supabase: SupabaseClient): Promise<CycleSummary[]> {
+export const getCycles = cache(async (supabase: SupabaseClient): Promise<CycleSummary[]> => {
   const { data } = await supabase
     .from("cycles")
     .select(CYCLE_SELECT)
@@ -97,15 +100,34 @@ export async function getCycles(supabase: SupabaseClient): Promise<CycleSummary[
     quartersByCycle.set(quarter.cycle_id, list);
   }
   return data.map((row) => toCycle(row, quartersByCycle.get(row.id) ?? []));
-}
+});
 
 /**
  * The cycle the workspace is currently working in: the newest one that is not
  * closed, falling back to the newest of any status so a closed programme still
  * renders its history instead of an empty app.
  */
-export async function getActiveCycle(supabase: SupabaseClient): Promise<CycleSummary | null> {
+export const getActiveCycle = cache(async (
+  supabase: SupabaseClient,
+): Promise<CycleSummary | null> => {
   return chooseCurrent(await getCycles(supabase));
+});
+
+/** Shared request cache for the cycle rendered by the workspace shell and page. */
+export const getActiveCycleForRequest = cache(async (): Promise<CycleSummary | null> => {
+  return getActiveCycle(await getRequestClient());
+});
+
+/** The most recent cycle before the current one, for carrying goals forward. */
+export async function getPreviousCycle(
+  supabase: SupabaseClient,
+  currentCycle: CycleSummary,
+): Promise<CycleSummary | null> {
+  const cycles = await getCycles(supabase);
+  return (
+    cycles.find((cycle) => cycle.startDate < currentCycle.startDate && cycle.id !== currentCycle.id) ??
+    null
+  );
 }
 
 interface ParticipantRow {

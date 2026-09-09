@@ -1,3 +1,4 @@
+import { CsvDownloadButton } from "@/app/components/csv-download-button";
 import { PageHeader } from "@/app/components/page-header";
 import { PeopleRoster } from "@/app/components/people-roster";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +63,21 @@ function HeadcountCard({
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <CardTitle>{title}</CardTitle>
-          <Badge variant="outline">{total} people</Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <CsvDownloadButton
+              filename={`ascend-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`}
+              rows={[
+                [label, "Count", "% of org"],
+                ...rows.map(([name, count]) => [
+                  name,
+                  count,
+                  total ? Math.round((count / total) * 100) : 0,
+                ]),
+              ]}
+              label="Download CSV"
+            />
+            <Badge variant="outline">{total} people</Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="px-0">

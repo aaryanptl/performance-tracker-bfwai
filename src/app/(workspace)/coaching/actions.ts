@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getActiveCycle, getOwnParticipant, getParticipantById } from "@/lib/data/cycle";
+import {
+  getActiveCycle,
+  getOwnParticipant,
+  getParticipantById,
+  getVisibleParticipants,
+} from "@/lib/data/cycle";
 import { RECOMMENDATIONS, type Recommendation } from "@/lib/data/performance-types";
 import { getViewer } from "@/lib/data/viewer";
 
@@ -358,29 +363,35 @@ export async function addTranscriptEntry(
   return { error: null, message: "Transcript entry added." };
 }
 
-/** Release a review to the person it is about. Only then do they see a score. */
+/** Release a completed review to the person it is about. Calibration is optional. */
 export async function releaseReview(reviewId: number): Promise<CoachingActionResult> {
   const viewer = await getViewer();
   if (!viewer) return { error: "Your session has expired. Sign in again." };
-  if (!viewer.isAdmin) return { error: "Leadership releases scores." };
 
   const { data: review } = await viewer.supabase
     .from("quarterly_reviews")
-    .select("id, okr_rating, competency_rating, status")
+    .select("id, coach_id, okr_rating, competency_rating, status")
     .eq("id", reviewId)
     .maybeSingle<{
       id: number;
+      coach_id: number;
       okr_rating: number | null;
       competency_rating: number | null;
       status: string;
     }>();
 
   if (!review) return { error: "That review is not available to you." };
+  if (!viewer.isAdmin && review.coach_id !== viewer.personId) {
+    return { error: "Only the assigned coach or Leadership can release this score." };
+  }
   if (review.okr_rating === null || review.competency_rating === null) {
     return { error: "Both ratings must be set before a review can be released." };
   }
-  if (!["calibration", "founder_signed"].includes(review.status)) {
-    return { error: "Calibrate and sign off the review before releasing it." };
+  if (!["coach_draft", "calibration", "founder_signed"].includes(review.status)) {
+    return { error: "This review is not ready to be released." };
+  }
+  if (!viewer.isAdmin && review.status !== "coach_draft") {
+    return { error: "Leadership must release a review that is already in calibration." };
   }
 
   const { data: released, error } = await viewer.supabase
@@ -395,6 +406,58 @@ export async function releaseReview(reviewId: number): Promise<CoachingActionRes
 
   refresh();
   return { error: null, message: "Released." };
+}
+
+/** Release every completed review assigned to the current coach in the active cycle. */
+export async function releaseOwnReviews(): Promise<CoachingActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+
+  const cycle = await getActiveCycle(viewer.supabase);
+  if (!cycle) return { error: "No cycle is open." };
+
+  const participants = (await getVisibleParticipants(viewer.supabase, cycle.id)).filter(
+    (participant) => participant.coachId === viewer.personId,
+  );
+  const participantIds = participants.map((participant) => participant.id);
+  if (participantIds.length === 0) {
+    return { error: "You do not have any assigned people in the active cycle." };
+  }
+
+  const { data: reviews, error: reviewError } = await viewer.supabase
+    .from("quarterly_reviews")
+    .select("id, okr_rating, competency_rating")
+    .in("cycle_participant_id", participantIds)
+    .eq("status", "coach_draft")
+    .returns<{ id: number; okr_rating: number | null; competency_rating: number | null }[]>();
+
+  if (reviewError) return { error: `Scores could not be loaded: ${reviewError.message}` };
+
+  const eligibleIds = (reviews ?? [])
+    .filter((review) => review.okr_rating !== null && review.competency_rating !== null)
+    .map((review) => review.id);
+  if (eligibleIds.length === 0) {
+    return { error: "No completed scores are ready to release." };
+  }
+
+  const { data: released, error: releaseError } = await viewer.supabase
+    .from("quarterly_reviews")
+    .update({ status: "released", released_at: new Date().toISOString() })
+    .in("id", eligibleIds)
+    .eq("status", "coach_draft")
+    .select("id")
+    .returns<{ id: number }[]>();
+
+  if (releaseError) return { error: `Scores could not be released: ${releaseError.message}` };
+
+  const releasedCount = released?.length ?? 0;
+  if (releasedCount === 0) return { error: "No scores were released." };
+
+  refresh();
+  return {
+    error: null,
+    message: `${releasedCount} ${releasedCount === 1 ? "score" : "scores"} released to your people.`,
+  };
 }
 
 /** Leadership records a calibration decision, including a final score override. */

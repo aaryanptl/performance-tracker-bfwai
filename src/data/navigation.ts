@@ -38,7 +38,6 @@ export const NAVIGATION: NavigationGroup[] = [
         href: "/coaching/approvals",
         icon: ShieldCheck,
         roles: ["coach", "admin"],
-        badge: "0",
       },
       {
         label: "Scoring",

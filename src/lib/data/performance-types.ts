@@ -161,6 +161,8 @@ export interface Charter {
   id: number;
   participantId: number;
   version: number;
+  createdAt: string;
+  updatedAt: string;
   cycleIntent: string | null;
   context: string | null;
   status: CharterStatus;

@@ -2,7 +2,11 @@ import { CalendarClock, Goal, Printer } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { CharterApprovalStrip } from "@/app/components/charter-approval-strip";
+import {
+  CharterApprovalStrip,
+  charterStepForStatus,
+} from "@/app/components/charter-approval-strip";
+import { CharterChangeHistory } from "@/app/components/charter-change-history";
 import { PageHeader } from "@/app/components/page-header";
 import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Badge } from "@/components/ui/badge";
@@ -16,16 +20,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { getActiveCycleForRequest, getOwnParticipant } from "@/lib/data/cycle";
 import { CHARTER_STATUS_LABELS } from "@/lib/data/performance-types";
-import { getCharter, getReviews } from "@/lib/data/records";
+import { getCharterHistory, getReviews } from "@/lib/data/records";
 import { getViewer } from "@/lib/data/viewer";
 
 export default async function CharterPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   if (!cycle) {
     return (
       <>
@@ -50,24 +54,24 @@ export default async function CharterPage() {
         <WorkflowEmpty
           icon={CalendarClock}
           title="You are not enrolled in this cycle"
-          description="Ask an administrator to add you to the current cycle from Cycles & settings."
+          description={
+            viewer.isAdmin
+              ? "Add yourself to the current cycle from People & coaches, then return here to draft your charter."
+              : "Ask an administrator to add you to the current cycle from People & coaches."
+          }
+          actionLabel={viewer.isAdmin ? "Open People & coaches" : undefined}
+          href={viewer.isAdmin ? "/admin/people" : undefined}
         />
       </>
     );
   }
 
-  const [charter, reviews] = await Promise.all([
-    getCharter(viewer.supabase, participant.id),
+  const [charterHistory, reviews] = await Promise.all([
+    getCharterHistory(viewer.supabase, participant.id),
     getReviews(viewer.supabase, participant.id),
   ]);
-  const step =
-    charter === null || charter.status === "draft"
-      ? 1
-      : charter.status === "approved_locked"
-        ? 4
-        : charter.status === "coach_reviewed"
-          ? 3
-          : 2;
+  const charter = charterHistory[0] ?? null;
+  const step = charterStepForStatus(charter?.status ?? null);
 
   return (
     <>
@@ -202,6 +206,8 @@ export default async function CharterPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          <CharterChangeHistory history={charterHistory} />
         </div>
       )}
     </>

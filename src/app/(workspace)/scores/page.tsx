@@ -7,7 +7,8 @@ import { ScoringGuideDialog } from "@/app/components/scoring-guide-dialog";
 import { WorkflowEmpty } from "@/app/components/workflow-empty";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveCycle, getOwnParticipant } from "@/lib/data/cycle";
+import { RATINGS } from "@/data/performance";
+import { getActiveCycleForRequest, getOwnParticipant } from "@/lib/data/cycle";
 import {
   halfYearScore,
   performanceLevelForScore,
@@ -21,7 +22,7 @@ export default async function ScoresPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
-  const cycle = await getActiveCycle(viewer.supabase);
+  const cycle = await getActiveCycleForRequest();
   const participant = cycle
     ? await getOwnParticipant(viewer.supabase, cycle.id, viewer.personId)
     : null;
@@ -30,6 +31,13 @@ export default async function ScoresPage() {
   // A score exists for the person only once it has been released to them.
   const released = reviews.filter((review) => review.releasedAt !== null);
   const half = halfYearScore(reviews);
+
+  const levelLabelForScore = (score: number | null) => {
+    const level = performanceLevelForScore(score);
+    return level === null
+      ? null
+      : (RATINGS.find((rating) => rating.value === level)?.label ?? null);
+  };
 
   const tiles = [
     ...(cycle?.quarters ?? []).map((quarter) => {
@@ -55,19 +63,17 @@ export default async function ScoresPage() {
         {tiles.map((tile) => (
           <Card key={tile.label}>
             <CardContent>
-              <p className="font-heading text-3xl font-semibold">
+              <p className="text-sm text-muted-foreground">{tile.label}</p>
+              <p className="mt-2 font-heading text-3xl font-semibold text-primary">
                 {tile.value === null ? (
                   <span className="text-muted-foreground">&mdash;</span>
                 ) : (
-                  tile.value.toFixed(2)
+                  (levelLabelForScore(tile.value) ?? "—")
                 )}
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <p className="text-sm text-muted-foreground">{tile.label}</p>
-                {tile.value !== null ? (
-                  <Badge variant="outline">Level {performanceLevelForScore(tile.value)}</Badge>
-                ) : null}
-              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Score {tile.value?.toFixed(2) ?? "—"}
+              </p>
             </CardContent>
           </Card>
         ))}
@@ -87,7 +93,7 @@ export default async function ScoresPage() {
         <WorkflowEmpty
           icon={Trophy}
           title="No scores released yet"
-          description="Scores appear here after the quarterly conversation and calibration."
+          description="Scores appear here after the quarterly review is released."
         />
       ) : (
         <div className="grid gap-6">
@@ -110,17 +116,18 @@ export default async function ScoresPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Quarterly score</p>
+                    <p className="text-xs text-muted-foreground">Quarterly level</p>
                     {(() => {
                       const effectiveScore = review.calibratedScore ?? review.quarterlyScore;
-                      const level = performanceLevelForScore(effectiveScore);
                       return (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-heading text-xl font-semibold">
-                            {effectiveScore?.toFixed(2) ?? "—"}
+                        <>
+                          <p className="font-heading text-xl font-semibold text-primary">
+                            {levelLabelForScore(effectiveScore) ?? "—"}
                           </p>
-                          {level !== null ? <Badge variant="outline">Level {level}</Badge> : null}
-                        </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Score {effectiveScore?.toFixed(2) ?? "—"}
+                          </p>
+                        </>
                       );
                     })()}
                   </div>

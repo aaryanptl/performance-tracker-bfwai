@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Save, Trash2 } from "lucide-react";
+import { Crown, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 
@@ -8,6 +8,7 @@ import {
   type CycleActionResult,
   removeCycle,
   setCycleStatus,
+  syncActiveCycle,
   updateCycle,
 } from "@/app/(workspace)/admin/cycles/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -55,6 +56,10 @@ export function CycleManager({ cycle, current }: { cycle: CycleSummary; current:
     run(() => setCycleStatus(cycle.id, "active"));
   }
 
+  function syncRoster() {
+    run(syncActiveCycle);
+  }
+
   function remove() {
     if (!window.confirm(`Remove the unused cycle “${cycle.name}”?`)) return;
     run(() => removeCycle(cycle.id));
@@ -71,9 +76,20 @@ export function CycleManager({ cycle, current }: { cycle: CycleSummary; current:
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {cycle.status === "active" ? (
-            <Badge variant="secondary">
-              <Crown /> Current
-            </Badge>
+            <>
+              <Badge variant="secondary">
+                <Crown /> Current
+              </Badge>
+              <Button
+                disabled={pending}
+                onClick={syncRoster}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw /> Sync roster access
+              </Button>
+            </>
           ) : (
             <Button
               disabled={pending}
