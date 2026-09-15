@@ -17,6 +17,7 @@ const OK: CycleActionResult = { error: null };
 function refresh() {
   revalidatePath("/admin/cycles");
   revalidatePath("/admin/dashboard");
+  revalidatePath("/admin/people");
   revalidatePath("/charter");
   revalidatePath("/");
 }
@@ -86,7 +87,11 @@ async function syncCycleParticipants(
       .update({ active: true })
       .in("id", inactiveIds);
     if (error) {
-      return { error: "Previously disabled cycle access could not be restored.", added: 0, restored: 0 };
+      return {
+        error: "Previously disabled cycle access could not be restored.",
+        added: 0,
+        restored: 0,
+      };
     }
   }
 
@@ -554,4 +559,67 @@ export async function removeCycle(cycleId: number): Promise<CycleActionResult> {
 
   refresh();
   return { error: null, message: "Unused cycle removed." };
+}
+
+/** Reset one person's current-cycle performance records without deleting their account. */
+export async function resetPersonCurrentCycleData(
+  cycleId: number,
+  personId: number,
+): Promise<CycleActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { error: "Your session has expired. Sign in again." };
+  if (!viewer.isAdmin) return { error: "Only an administrator can reset person data." };
+  if (!Number.isInteger(cycleId) || cycleId <= 0) {
+    return { error: "Choose a valid cycle." };
+  }
+  if (!Number.isInteger(personId) || personId <= 0) {
+    return { error: "Choose a valid person." };
+  }
+
+  const { data: cycle, error: cycleError } = await viewer.supabase
+    .from("cycles")
+    .select("id, name")
+    .eq("organization_id", viewer.organizationId)
+    .eq("id", cycleId)
+    .maybeSingle<{ id: number; name: string }>();
+
+  if (cycleError) {
+    console.error("[admin] Current cycle lookup failed:", cycleError.message);
+    return { error: "The current cycle could not be read." };
+  }
+  if (!cycle) return { error: "That cycle could not be found." };
+
+  const { data: person, error: personError } = await viewer.supabase
+    .from("people")
+    .select("id, display_name")
+    .eq("id", personId)
+    .eq("organization_id", viewer.organizationId)
+    .maybeSingle<{ id: number; display_name: string }>();
+  if (personError || !person) return { error: "That person could not be found." };
+
+  const { data: participant, error: participantError } = await viewer.supabase
+    .from("cycle_participants")
+    .select("id")
+    .eq("cycle_id", cycle.id)
+    .eq("person_id", personId)
+    .eq("active", true)
+    .maybeSingle<{ id: number }>();
+  if (participantError || !participant) {
+    return { error: `${person.display_name} is not enrolled in the current cycle.` };
+  }
+
+  const { error } = await viewer.supabase.rpc("reset_person_cycle_data", {
+    target_cycle_id: cycle.id,
+    target_person_id: personId,
+  });
+  if (error) {
+    console.error("[admin] Person cycle reset failed:", error.message);
+    return { error: "The person's current-cycle data could not be reset." };
+  }
+
+  refresh();
+  return {
+    error: null,
+    message: `Reset ${person.display_name}'s performance data for ${cycle.name}. Their account and roster profile were kept.`,
+  };
 }

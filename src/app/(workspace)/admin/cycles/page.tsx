@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { CycleManager } from "@/app/components/cycle-manager";
 import { OpenCycleCard, SeedLibraryCard } from "@/app/components/cycle-setup";
 import { PageHeader } from "@/app/components/page-header";
+import { ResetPersonDataCard } from "@/app/components/reset-person-data-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCycles } from "@/lib/data/cycle";
+import { getCycles, getVisibleParticipants } from "@/lib/data/cycle";
 import { getViewer } from "@/lib/data/viewer";
 
 export default async function CyclesPage() {
@@ -19,6 +20,10 @@ export default async function CyclesPage() {
     cycles.find((cycle) => cycle.status !== "closed") ??
     cycles[0] ??
     null;
+  const resetCycle = current?.status === "closed" ? null : current;
+  const resetPeople = resetCycle
+    ? await getVisibleParticipants(viewer.supabase, resetCycle.id)
+    : [];
   const { count } = await viewer.supabase
     .from("competencies")
     .select("id", { count: "exact", head: true })
@@ -59,6 +64,10 @@ export default async function CyclesPage() {
             </CardContent>
           </Card>
         ) : null}
+      </div>
+
+      <div className="mt-8">
+        <ResetPersonDataCard cycle={resetCycle} people={resetPeople} />
       </div>
 
       <div className="mt-8">

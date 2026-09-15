@@ -15,14 +15,19 @@ function Select({ className, children, ...props }: SelectProps) {
   );
 }
 
-function SelectTrigger({ className, size = "default", children, ...props }: SelectPrimitive.Trigger.Props & {
+function SelectTrigger({
+  className,
+  size = "default",
+  children,
+  ...props
+}: SelectPrimitive.Trigger.Props & {
   size?: "sm" | "default";
 }) {
   return (
     <SelectPrimitive.Trigger
       data-size={size}
       className={cn(
-        "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-4xl border border-input bg-input/30 px-3 py-1 text-sm text-foreground transition-colors outline-none select-none hover:bg-input/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=sm]:h-8",
+        "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 py-1 text-sm text-foreground shadow-xs transition-[border-color,box-shadow] duration-150 outline-none select-none hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=sm]:h-8",
         className,
       )}
       {...props}
@@ -45,7 +50,7 @@ function SelectContent({ className, children, ...props }: SelectPrimitive.Popup.
       <SelectPrimitive.Positioner className="z-50 outline-none" sideOffset={4}>
         <SelectPrimitive.Popup
           className={cn(
-            "min-w-[var(--anchor-width)] origin-(--transform-origin) overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-[transform,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+            "min-w-[var(--anchor-width)] origin-(--transform-origin) overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-[transform,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
             className,
           )}
           {...props}
@@ -65,7 +70,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
   return (
     <SelectPrimitive.Item
       className={cn(
-        "grid cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
+        "grid cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}
@@ -92,7 +97,9 @@ function SelectLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) 
 }
 
 function SelectSeparator({ className, ...props }: SelectPrimitive.Separator.Props) {
-  return <SelectPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
+  return (
+    <SelectPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />
+  );
 }
 
 function SelectScrollUpButton({ className, ...props }: SelectPrimitive.ScrollUpArrow.Props) {

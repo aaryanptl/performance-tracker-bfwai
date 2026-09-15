@@ -1,5 +1,7 @@
 "use client";
 
+import { BookOpenText } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,8 +23,17 @@ const ANCHORS = [
 export function CompetencyAnchorsDialog({ competency }: { competency: LibraryCompetency }) {
   return (
     <Dialog>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        What 5 / 3 / 1 looks like
+      <DialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="xs"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={`What a 5, 3 and 1 look like for ${competency.name}`}
+          />
+        }
+      >
+        <BookOpenText />5 · 3 · 1 guide
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] gap-5 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
@@ -35,18 +46,27 @@ export function CompetencyAnchorsDialog({ competency }: { competency: LibraryCom
           </p>
           <p className="mt-1 text-sm leading-6">{competency.measure}</p>
         </div>
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {ANCHORS.map((anchor) => (
             <div
               key={anchor.value}
-              className={
-                anchor.value === 5 ? "rounded-xl bg-accent/50 p-4" : "rounded-xl bg-muted/50 p-4"
-              }
+              className="grid grid-cols-[2.5rem_1fr] gap-3 rounded-lg border p-3.5"
             >
-              <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {anchor.label}
-              </p>
-              <p className="mt-1 text-sm leading-6">{competency[anchor.key]}</p>
+              <span
+                className={
+                  anchor.value === 5
+                    ? "grid size-9 place-items-center rounded-md bg-primary font-heading text-base font-semibold text-primary-foreground"
+                    : "grid size-9 place-items-center rounded-md bg-muted font-heading text-base font-semibold text-foreground"
+                }
+              >
+                {anchor.value}
+              </span>
+              <div>
+                <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  {anchor.label}
+                </p>
+                <p className="mt-1 text-sm leading-6">{competency[anchor.key]}</p>
+              </div>
             </div>
           ))}
         </div>

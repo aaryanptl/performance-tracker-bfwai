@@ -9,6 +9,29 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+/** Data sources are often a URL, which has no natural break points — let it wrap anywhere. */
+function DataSource({ value }: { value: string }) {
+  if (!value) return null;
+  const isUrl = /^https?:\/\//i.test(value);
+  return (
+    <span className="block break-all text-xs">
+      <span className="text-muted-foreground/80">Source: </span>
+      {isUrl ? (
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          {value}
+        </a>
+      ) : (
+        value
+      )}
+    </span>
+  );
+}
+
 export function CharterChangeHistory({ history }: { history: Charter[] }) {
   if (history.length === 0) return null;
 
@@ -22,33 +45,31 @@ export function CharterChangeHistory({ history }: { history: Charter[] }) {
       </CardHeader>
       <CardContent className="grid gap-3">
         {history.map((entry, index) => (
-          <details key={entry.id} open={index === 0} className="rounded-xl border bg-muted/20">
-            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 p-4">
-              <span className="font-medium">Version {entry.version}</span>
+          <details key={entry.id} open={index === 0} className="group/version rounded-lg border">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 transition-colors hover:bg-muted/50 group-open/version:bg-muted/30">
+              <span className="font-medium tabular-nums">Version {entry.version}</span>
               {index === 0 ? <Badge variant="secondary">Current</Badge> : null}
               <Badge variant="outline">{CHARTER_STATUS_LABELS[entry.status]}</Badge>
-              <time
-                dateTime={entry.updatedAt}
-                className="ml-auto text-xs text-muted-foreground"
-              >
+              <time dateTime={entry.updatedAt} className="ml-auto text-xs text-muted-foreground">
                 {formatDate(entry.updatedAt)}
               </time>
             </summary>
             <div className="grid gap-4 border-t p-4 text-sm md:grid-cols-2">
-              <div>
+              <div className="min-w-0">
                 <p className="mb-2 font-medium">Goals</p>
                 <ol className="grid gap-2 text-muted-foreground">
                   {entry.goals.map((goal) => (
-                    <li key={goal.id}>
+                    <li key={goal.id} className="min-w-0">
                       <span className="font-medium text-foreground">{goal.outcome}</span>
                       <span className="block">
-                        {goal.keyResult} · {goal.baseline} → {goal.target} · {goal.dataSource}
+                        {goal.keyResult} · {goal.baseline} → {goal.target}
                       </span>
+                      <DataSource value={goal.dataSource} />
                     </li>
                   ))}
                 </ol>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="mb-2 font-medium">Competencies</p>
                 <ul className="grid gap-2 text-muted-foreground">
                   {entry.competencies.map((competency) => (

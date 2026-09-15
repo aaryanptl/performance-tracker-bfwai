@@ -1,8 +1,19 @@
 "use client";
 
-import { Copy, LibraryBig, Plus, Printer, Save, Send, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Copy,
+  LibraryBig,
+  Plus,
+  Printer,
+  Save,
+  Send,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
-import { useActionState, useEffect, useId, useMemo, useState } from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   type CharterActionResult,
   saveCharter,
@@ -48,6 +59,7 @@ import {
   CHARTER_EDITABLE,
   CHARTER_STATUS_LABELS,
   type Charter,
+  type CharterStatus,
   type CycleSummary,
 } from "@/lib/data/performance-types";
 import type { LibraryCompetency, OkrExample } from "@/lib/types";
@@ -62,7 +74,6 @@ interface GoalDraft {
   dataSource: string;
 }
 
-const FIELD = "rounded-xl";
 const ALL_UNITS = "All units";
 
 function emptyGoal(id: string): GoalDraft {
@@ -84,16 +95,21 @@ function goalFromExample(id: string, example: OkrExample): GoalDraft {
 function SectionHeading({
   title,
   description,
+  meta,
   actions,
 }: {
   title: string;
   description: string;
+  meta?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h2 className="font-heading text-xl font-semibold tracking-tight">{title}</h2>
+    <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-3">
+          <h2 className="font-heading text-xl font-semibold tracking-tight">{title}</h2>
+          {meta}
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -101,11 +117,81 @@ function SectionHeading({
   );
 }
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
+function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+    <p
+      className={cn(
+        "text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted-foreground",
+        className,
+      )}
+    >
       {children}
     </p>
+  );
+}
+
+/** A labelled control with an optional one-line hint sitting under the label. */
+function Field({
+  id,
+  label,
+  hint,
+  children,
+  className,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid gap-1.5", className)}>
+      <Label htmlFor={id}>{label}</Label>
+      {hint ? <p className="-mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
+      {children}
+    </div>
+  );
+}
+
+/** "n of max" as a row of filled segments — reads at a glance without a number. */
+function CountMeter({ value, max, label }: { value: number; max: number; label: string }) {
+  const segments = Array.from({ length: max }, (_, position) => position + 1);
+  return (
+    <div className="flex items-center gap-2" title={label}>
+      <span className="flex gap-1" aria-hidden="true">
+        {segments.map((segment) => (
+          <span
+            key={segment}
+            className={cn(
+              "h-1.5 w-4 rounded-full transition-colors",
+              segment <= value ? "bg-primary" : "bg-border",
+            )}
+          />
+        ))}
+      </span>
+      <span className="text-xs font-medium tabular-nums text-muted-foreground">
+        {value}/{max}
+        <span className="sr-only"> {label}</span>
+      </span>
+    </div>
+  );
+}
+
+const STATUS_TONE: Record<CharterStatus, string> = {
+  draft: "bg-muted text-foreground",
+  submitted: "bg-accent text-accent-foreground",
+  coach_reviewed: "bg-accent text-accent-foreground",
+  coach_changes_requested: "bg-destructive/10 text-destructive",
+  founder_changes_requested: "bg-destructive/10 text-destructive",
+  approved_locked: "bg-primary text-primary-foreground",
+};
+
+function StatusBadge({ status }: { status: CharterStatus }) {
+  return (
+    <Badge className={cn("gap-1.5 border-transparent", STATUS_TONE[status])}>
+      <span className="size-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+      {CHARTER_STATUS_LABELS[status]}
+    </Badge>
   );
 }
 
@@ -140,7 +226,7 @@ function GoalLibraryDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button disabled={disabled}>
+          <Button variant="outline" disabled={disabled}>
             <LibraryBig />
             Add from the library
           </Button>
@@ -171,7 +257,7 @@ function GoalLibraryDialog({
             ))}
           </SelectContent>
         </Select>
-        <div className="grid gap-5">
+        <div className="grid gap-6">
           {grouped.map(([objective, examples]) => (
             <div key={objective}>
               <Eyebrow>{examples[0].unit}</Eyebrow>
@@ -181,14 +267,16 @@ function GoalLibraryDialog({
                   <Button
                     key={example.kr}
                     variant="outline"
-                    className="h-auto w-full justify-start rounded-xl p-3 text-left"
+                    className="h-auto w-full justify-start p-3 text-left shadow-none hover:border-primary/40 hover:bg-accent/40"
                     onClick={() => {
                       onPick(example);
                       setOpen(false);
                     }}
                   >
-                    <span>
-                      <span className="block font-normal">{example.kr}</span>
+                    <span className="min-w-0">
+                      <span className="block font-normal text-pretty whitespace-normal">
+                        {example.kr}
+                      </span>
                       <span className="mt-1 block text-xs font-normal text-muted-foreground">
                         Measured from: {example.source}
                       </span>
@@ -209,10 +297,12 @@ function CompetencyPickerDialog({
   taken,
   disabled,
   onPick,
+  variant = "outline",
 }: {
   taken: string[];
   disabled: boolean;
   onPick: (competency: LibraryCompetency) => void;
+  variant?: "outline" | "default";
 }) {
   const [open, setOpen] = useState(false);
   const available = choosableCompetencies().filter((item) => !taken.includes(item.name));
@@ -221,7 +311,7 @@ function CompetencyPickerDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button disabled={disabled}>
+          <Button variant={variant} disabled={disabled}>
             <Sparkles />
             Choose a competency
           </Button>
@@ -240,15 +330,15 @@ function CompetencyPickerDialog({
             <Button
               key={competency.name}
               variant="outline"
-              className="h-auto w-full justify-start rounded-xl p-4 text-left"
+              className="h-auto w-full justify-start p-4 text-left shadow-none hover:border-primary/40 hover:bg-accent/40"
               onClick={() => {
                 onPick(competency);
                 setOpen(false);
               }}
             >
-              <span>
+              <span className="min-w-0">
                 <span className="block font-medium">{competency.name}</span>
-                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                <span className="mt-1 block text-xs font-normal text-muted-foreground text-pretty whitespace-normal">
                   {competency.unit} &middot; {competency.definition}
                 </span>
               </span>
@@ -274,79 +364,92 @@ function GoalCard({
   onRemove: () => void;
 }) {
   const fieldId = useId();
+  const number = String(index + 1).padStart(2, "0");
   return (
     <Card>
       <CardContent className="grid gap-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-7 place-items-center rounded-md bg-muted font-heading text-xs font-semibold tabular-nums text-foreground">
+              {number}
+            </span>
             <Eyebrow>Goal {index + 1}</Eyebrow>
-            <Label htmlFor={`${fieldId}-objective`} className="sr-only">
-              Goal {index + 1} objective
-            </Label>
-            <Input
-              id={`${fieldId}-objective`}
-              value={goal.objective}
-              onChange={(event) => onChange({ objective: event.target.value })}
-              disabled={disabled}
-              placeholder="My objective"
-              className="mt-1 h-auto rounded-none border-x-0 border-t-0 bg-transparent px-0 pt-0 pb-1.5 font-heading text-base font-semibold placeholder:text-foreground/70 focus-visible:border-b-primary focus-visible:ring-0"
-            />
           </div>
           <Button
-            variant="destructive"
-            size="sm"
-            className="shrink-0"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             disabled={disabled}
             onClick={onRemove}
+            aria-label={`Remove goal ${index + 1}`}
+            title="Remove goal"
           >
-            Remove
+            <Trash2 />
           </Button>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor={`${fieldId}-key-result`}>Key result &mdash; the measurable outcome</Label>
+
+        <Field
+          id={`${fieldId}-objective`}
+          label="Objective"
+          hint="What you want to achieve this cycle — one clear sentence."
+        >
+          <Input
+            id={`${fieldId}-objective`}
+            value={goal.objective}
+            onChange={(event) => onChange({ objective: event.target.value })}
+            disabled={disabled}
+            placeholder="e.g. Make every new cohort self-serve from day one"
+            className="h-11 px-3.5 font-heading text-base font-medium md:text-base"
+          />
+        </Field>
+
+        <Field
+          id={`${fieldId}-key-result`}
+          label="Key result"
+          hint="The number that proves the objective happened."
+        >
           <Input
             id={`${fieldId}-key-result`}
             value={goal.keyResult}
             onChange={(event) => onChange({ keyResult: event.target.value })}
             disabled={disabled}
-            placeholder="the number that proves the objective happened"
-            className={FIELD}
+            placeholder="e.g. Onboarding tickets per cohort"
           />
-        </div>
-        <div className="grid gap-5 md:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-baseline`}>Baseline</Label>
+        </Field>
+
+        <div className="grid items-end gap-4 md:grid-cols-[1fr_auto_1fr_1.35fr]">
+          <Field id={`${fieldId}-baseline`} label="Baseline">
             <Input
               id={`${fieldId}-baseline`}
               value={goal.baseline}
               onChange={(event) => onChange({ baseline: event.target.value })}
               disabled={disabled}
               placeholder="where you start"
-              className={FIELD}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-target`}>Target</Label>
+          </Field>
+          <ArrowRight
+            aria-hidden="true"
+            className="mb-2.5 hidden size-4 text-muted-foreground/70 md:block"
+          />
+          <Field id={`${fieldId}-target`} label="Target">
             <Input
               id={`${fieldId}-target`}
               value={goal.target}
               onChange={(event) => onChange({ target: event.target.value })}
               disabled={disabled}
               placeholder="what success is"
-              className={FIELD}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-data-source`}>Data source</Label>
+          </Field>
+          <Field id={`${fieldId}-data-source`} label="Data source">
             <Input
               id={`${fieldId}-data-source`}
               value={goal.dataSource}
               onChange={(event) => onChange({ dataSource: event.target.value })}
               disabled={disabled}
               placeholder="where the number comes from"
-              className={FIELD}
             />
-          </div>
+          </Field>
         </div>
       </CardContent>
     </Card>
@@ -372,30 +475,43 @@ function CompetencyCard({
   return (
     <Card size="sm" className="h-full">
       <CardContent className="flex flex-1 flex-col gap-4">
-        <div className="grid gap-3">
-          <div className="min-w-0">
-            <Eyebrow>
-              Competency {index + 1} &middot;{" "}
-              {competency.mandatory ? "Fixed for everyone" : "Chosen with your coach"}
-            </Eyebrow>
-            <h3 className="mt-1 font-heading text-base font-semibold">{competency.name}</h3>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="grid size-6 place-items-center rounded-md bg-muted font-heading text-[0.7rem] font-semibold tabular-nums">
+              {index + 1}
+            </span>
+            <Badge variant={competency.mandatory ? "secondary" : "outline"}>
+              {competency.mandatory ? "Fixed for everyone" : "Chosen with coach"}
+            </Badge>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {onRemove ? (
-              <Button variant="destructive" size="sm" disabled={disabled} onClick={onRemove}>
-                Remove
-              </Button>
-            ) : null}
+          {onRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              disabled={disabled}
+              onClick={onRemove}
+              aria-label={`Remove ${competency.name}`}
+              title="Remove competency"
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="min-w-0">
+          <h3 className="font-heading text-base font-semibold leading-snug">{competency.name}</h3>
+          <p className="mt-1.5 line-clamp-3 text-[0.8125rem] leading-5 text-muted-foreground">
+            {competency.definition}
+          </p>
+          <div className="-ml-2 mt-1">
             <CompetencyAnchorsDialog competency={competency} />
           </div>
         </div>
-        <p className="text-[0.8125rem] leading-5 text-muted-foreground">{competency.definition}</p>
-        <div className="mt-auto grid gap-2">
-          <Label htmlFor={`${fieldId}-commitment`}>My commitment &mdash; one line</Label>
-          <p className="-mt-1 text-[0.7rem] leading-4 text-muted-foreground">
-            What you will actually do under this competency. This is what the quarterly discussion
-            is judged against.
-          </p>
+
+        <div className="mt-auto grid gap-1.5">
+          <Label htmlFor={`${fieldId}-commitment`}>My commitment</Label>
           <Textarea
             id={`${fieldId}-commitment`}
             value={commitment}
@@ -403,11 +519,100 @@ function CompetencyCard({
             disabled={disabled}
             placeholder="e.g. weekly written project update to all stakeholders"
             rows={2}
-            className={FIELD}
           />
+          <p className="text-xs text-muted-foreground">
+            One line. This is what the quarterly discussion is judged against.
+          </p>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Save / send controls. Rendered twice — beside the title and again at the
+ * foot of the form — so a long charter never needs a scroll back up to act.
+ * Only actions that are possible right now are shown; the disabled-button-
+ * with-a-status-label pattern is gone.
+ */
+function CharterActions({
+  charter,
+  editable,
+  canSend,
+  approvedAndLocked,
+  saving,
+  sending,
+  hasUnsavedChanges,
+  sendAction,
+  previousCycleName,
+  onCopyPrevious,
+  compact = false,
+}: {
+  charter: Charter | null;
+  editable: boolean;
+  canSend: boolean;
+  approvedAndLocked: boolean;
+  saving: boolean;
+  sending: boolean;
+  /** The form differs from what is stored — Save is live and Send must wait. */
+  hasUnsavedChanges: boolean;
+  sendAction: (formData: FormData) => void;
+  previousCycleName: string | null;
+  onCopyPrevious: (() => void) | null;
+  compact?: boolean;
+}) {
+  const saveLabel = saving
+    ? "Saving…"
+    : !hasUnsavedChanges
+      ? "Saved"
+      : approvedAndLocked
+        ? "Save revision"
+        : "Save draft";
+  // Save leads while there is nothing else to do; once a clean draft can be
+  // sent, Send takes over as the primary action.
+  const savePrimary = editable && (!canSend || hasUnsavedChanges);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {!compact && onCopyPrevious && previousCycleName ? (
+        <Button type="button" variant="ghost" onClick={onCopyPrevious}>
+          <Copy />
+          Copy from {previousCycleName}
+        </Button>
+      ) : null}
+      {!compact && charter ? (
+        <Button
+          variant="ghost"
+          nativeButton={false}
+          render={<Link href={`/book/${charter.participantId}`} target="_blank" />}
+        >
+          <Printer />
+          Print / PDF
+        </Button>
+      ) : null}
+      {editable ? (
+        <Button
+          type="submit"
+          variant={savePrimary ? "default" : "outline"}
+          disabled={saving || sending || !hasUnsavedChanges}
+        >
+          {!saving && !hasUnsavedChanges ? <Check /> : <Save />}
+          {saveLabel}
+        </Button>
+      ) : null}
+      {canSend ? (
+        <Button
+          type="submit"
+          variant={hasUnsavedChanges ? "outline" : "default"}
+          formAction={sendAction}
+          disabled={saving || sending || hasUnsavedChanges}
+          title={hasUnsavedChanges ? "Save your changes before sending" : undefined}
+        >
+          <Send />
+          {sending ? "Sending…" : "Send to my coach"}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -472,6 +677,7 @@ export function CharterEditor({
 
   const goalsLeft = cycle.maxGoals - goals.length;
   const stillToChoose = CHARTER_CHOSEN_COMPETENCIES - chosen.length;
+  const totalCompetencies = fixed.length + CHARTER_CHOSEN_COMPETENCIES;
   const libraryLoaded = Object.keys(competencyIds).length > 0;
 
   const copyPreviousCharter = () => {
@@ -489,10 +695,7 @@ export function CharterEditor({
     );
     setCommitments(
       Object.fromEntries(
-        previousCharter.competencies.map((competency) => [
-          competency.name,
-          competency.commitment,
-        ]),
+        previousCharter.competencies.map((competency) => [competency.name, competency.commitment]),
       ),
     );
     setChosen(
@@ -537,6 +740,38 @@ export function CharterEditor({
       .filter((entry) => Number.isInteger(entry.competencyId)),
   );
 
+  /* Dirty tracking. The stored charter is the baseline; a successful save
+     moves the baseline to whatever was on screen when Save was pressed, so
+     edits made while the request was in flight still count as unsaved. */
+  const currentPayload = `${goalsPayload}|${competenciesPayload}`;
+  const [savedPayload, setSavedPayload] = useState<string | null>(() =>
+    charter ? currentPayload : null,
+  );
+  const pendingPayload = useRef<string | null>(null);
+  const hasUnsavedChanges = savedPayload !== currentPayload;
+
+  const save = (formData: FormData) => {
+    pendingPayload.current = currentPayload;
+    saveAction(formData);
+  };
+
+  useEffect(() => {
+    if (saveState.error === null && saveState.message && pendingPayload.current !== null) {
+      setSavedPayload(pendingPayload.current);
+      pendingPayload.current = null;
+    }
+  }, [saveState]);
+
+  // Closing the tab or reloading with unsaved edits asks first.
+  useEffect(() => {
+    if (!hasUnsavedChanges || !editable) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges, editable]);
+
   const message = saveState.message ?? sendState.message ?? null;
   const error = saveState.error ?? sendState.error ?? null;
   const libraryError = !libraryLoaded
@@ -549,64 +784,73 @@ export function CharterEditor({
     if (errorMessage) setErrorDialogOpen(true);
   }, [errorMessage]);
 
+  const actionProps = {
+    charter,
+    editable,
+    canSend,
+    approvedAndLocked,
+    saving,
+    sending,
+    hasUnsavedChanges,
+    sendAction,
+    previousCycleName,
+    onCopyPrevious: previousCharter ? copyPreviousCharter : null,
+  };
+
+  // What the foot of the form says depends on where the charter is on its path.
+  const footer = !editable
+    ? {
+        title: CHARTER_STATUS_LABELS[status],
+        body: `Your coach reviews first — refining targets and checking measurability — then ${APPROVER_LABEL} gives final approval. You can edit again if changes are requested.`,
+      }
+    : approvedAndLocked
+      ? {
+          title: "Revise this charter",
+          body: "This charter is approved and locked for the cycle. Saving a revision keeps the approved version in the change history.",
+        }
+      : canSend && hasUnsavedChanges
+        ? {
+            title: "You have unsaved changes",
+            body: "Save the draft first so your coach sees the latest version, then send it for review.",
+          }
+        : canSend
+          ? {
+              title: "Ready to send?",
+              body: `Your coach reviews first — refining targets and checking measurability — then ${APPROVER_LABEL} gives final approval. After that the charter is locked for the cycle.`,
+            }
+          : {
+              title: "Save a draft first",
+              body: "Once a draft is saved you can send it to your coach. Nothing is shared until you do.",
+            };
+
   return (
-    <form action={saveAction} className="space-y-10">
+    <form action={save} className="space-y-10">
       <input type="hidden" name="goals" value={goalsPayload} />
       <input type="hidden" name="competencies" value={competenciesPayload} />
 
-      <CharterApprovalStrip currentStep={charterStepForStatus(status)} />
+      <div className="grid gap-8">
+        <CharterApprovalStrip currentStep={charterStepForStatus(status)} />
 
-      <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Goal Charter &middot; {cycle.name}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {personName} &middot; {unitName}
-            {coachName ? ` · coach: ${coachName}` : null}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant="secondary"
-            className="uppercase tracking-[0.14em] text-[0.65rem] text-muted-foreground"
-          >
-            {CHARTER_STATUS_LABELS[status]}
-          </Badge>
-          <Button type="submit" variant="outline" disabled={!editable || saving}>
-            <Save />
-            {saving ? "Saving…" : approvedAndLocked ? "Save revision" : "Save draft"}
-          </Button>
-          {previousCharter && previousCycleName ? (
-            <Button type="button" variant="outline" onClick={copyPreviousCharter}>
-              <Copy />
-              Copy from {previousCycleName}
-            </Button>
-          ) : null}
-          <Button
-            type="submit"
-            formAction={sendAction}
-            disabled={!canSend || sending}
-          >
-            <Send />
-            {sending
-              ? "Sending…"
-              : canSend
-                ? "Send to my coach"
-                : approvedAndLocked
-                  ? "Save revision first"
-                  : CHARTER_STATUS_LABELS[status]}
-          </Button>
-          {charter ? (
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<Link href={`/book/${charter.participantId}`} target="_blank" />}
-            >
-              <Printer />
-              Print / PDF
-            </Button>
-          ) : null}
+        <div className="flex flex-col gap-5 border-b pb-7 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Eyebrow>{cycle.name}</Eyebrow>
+              <StatusBadge status={status} />
+            </div>
+            <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight sm:text-[2rem]">
+              Goal Charter
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{personName}</span> &middot; {unitName}
+              {coachName ? (
+                <>
+                  {" "}
+                  &middot; Coach <span className="font-medium text-foreground">{coachName}</span>
+                </>
+              ) : null}
+            </p>
+          </div>
+          <CharterActions {...actionProps} />
         </div>
       </div>
 
@@ -620,41 +864,50 @@ export function CharterEditor({
         </DialogContent>
       </Dialog>
 
-      {message && !error ? (
+      {message && !error && !hasUnsavedChanges ? (
         <Alert>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
 
       {charter?.decisions.length ? (
-        <Card>
-          <CardContent className="grid gap-3">
-            <Eyebrow>Review history</Eyebrow>
-            {charter.decisions.map((decision) => (
-              <div key={decision.id} className="rounded-xl border p-3 text-sm">
-                <p className="font-medium">
-                  {decision.actorName} &middot;{" "}
-                  {decision.capacity === "coach" ? "Coach" : APPROVER_LABEL} &middot;{" "}
-                  {decision.decision.replace(/_/g, " ")}
-                </p>
-                {decision.comment ? (
-                  <p className="mt-1 leading-6 text-muted-foreground">{decision.comment}</p>
-                ) : null}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <section>
+          <Eyebrow className="mb-3">Review history</Eyebrow>
+          <Card size="sm">
+            <CardContent className="divide-y">
+              {charter.decisions.map((decision) => (
+                <div key={decision.id} className="grid gap-1 py-3 text-sm first:pt-0 last:pb-0">
+                  <p>
+                    <span className="font-medium">{decision.actorName}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      &middot; {decision.capacity === "coach" ? "Coach" : APPROVER_LABEL} &middot;{" "}
+                      {decision.decision.replace(/_/g, " ")}
+                    </span>
+                  </p>
+                  {decision.comment ? (
+                    <p className="leading-6 text-muted-foreground">{decision.comment}</p>
+                  ) : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
       ) : null}
 
       <section>
         <SectionHeading
           title="Goals"
           description={`Maximum ${cycle.maxGoals}. Every goal needs a measurable key result and a named data source.`}
+          meta={
+            <CountMeter
+              value={goals.length}
+              max={cycle.maxGoals}
+              label={`${goals.length} of ${cycle.maxGoals} goals`}
+            />
+          }
           actions={
             <>
-              <Badge variant="outline" className="mr-1">
-                {goals.length} of {cycle.maxGoals}
-              </Badge>
               <GoalLibraryDialog
                 defaultUnit={unitName}
                 disabled={goalsLeft <= 0 || !editable}
@@ -688,20 +941,39 @@ export function CharterEditor({
             />
           ))}
           {goals.length === 0 ? (
-            <Card className="border-dashed bg-muted/30">
-              <CardContent className="text-center text-sm text-muted-foreground">
+            <div className="grid place-items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
+              <p className="max-w-sm text-sm text-muted-foreground">
                 No goals yet. Pick from the library for your unit, or write your own. Either way,
                 adapt the wording to your real work.
-              </CardContent>
-            </Card>
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <GoalLibraryDialog defaultUnit={unitName} disabled={!editable} onPick={addGoal} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!editable}
+                  onClick={() => addGoal()}
+                >
+                  <Plus />
+                  Write my own
+                </Button>
+              </div>
+            </div>
           ) : null}
         </div>
       </section>
 
-      <section className="border-t pt-8">
+      <section className="border-t pt-9">
         <SectionHeading
           title="Competencies"
           description={`${fixed.length} fixed for everyone, ${CHARTER_CHOSEN_COMPETENCIES} chosen with your coach. Each carries a one-line commitment.`}
+          meta={
+            <CountMeter
+              value={fixed.length + chosen.length}
+              max={totalCompetencies}
+              label={`${fixed.length + chosen.length} of ${totalCompetencies} competencies`}
+            />
+          }
           actions={
             <CompetencyPickerDialog
               taken={chosen.map((item) => item.name)}
@@ -710,7 +982,7 @@ export function CharterEditor({
             />
           }
         />
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[...fixed, ...chosen].map((competency, index) => (
             <CompetencyCard
               key={competency.name}
@@ -737,46 +1009,34 @@ export function CharterEditor({
             { length: Math.max(stillToChoose, 0) },
             (_, slot) => fixed.length + chosen.length + slot + 1,
           ).map((position) => (
-            <Card
+            <div
               key={`open-slot-${position}`}
-              size="sm"
-              className="min-h-40 border-dashed bg-muted/30"
+              className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-6 text-center"
             >
-              <CardContent className="flex h-full flex-1 flex-col justify-between gap-4">
-                <div className="min-w-0">
-                  <Eyebrow>Competency {position} &middot; Chosen with your coach</Eyebrow>
-                  <p className="mt-2 text-[0.8125rem] leading-5 text-muted-foreground">
-                    Pick one from the library that matches the work of this cycle.
-                  </p>
-                </div>
-                <div className="flex justify-end">
-                  <CompetencyPickerDialog
-                    taken={chosen.map((item) => item.name)}
-                    disabled={!editable}
-                    onPick={pickCompetency}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+              <span className="grid size-6 place-items-center rounded-md bg-muted font-heading text-[0.7rem] font-semibold tabular-nums text-muted-foreground">
+                {position}
+              </span>
+              <p className="max-w-[16rem] text-[0.8125rem] leading-5 text-muted-foreground">
+                Open slot. Pick a competency from the library that matches the work of this cycle.
+              </p>
+              <CompetencyPickerDialog
+                taken={chosen.map((item) => item.name)}
+                disabled={!editable}
+                onPick={pickCompetency}
+              />
+            </div>
           ))}
         </div>
       </section>
 
-      <Card className={cn("bg-accent/40", !editable && "bg-primary/10")}>
-        <CardContent>
-          <div>
-            <p className="font-heading text-base font-semibold">
-              {editable
-                ? approvedAndLocked
-                  ? "Revise this charter"
-                  : "Ready to send?"
-                : CHARTER_STATUS_LABELS[status]}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Your coach reviews first &mdash; refining targets and checking measurability &mdash;
-              then {APPROVER_LABEL} gives final approval. After that the charter is locked for the
-              cycle.
-            </p>
+      <Card className={cn(!editable && "bg-accent/30")}>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            <p className="font-heading text-base font-semibold">{footer.title}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{footer.body}</p>
+          </div>
+          <div className="shrink-0">
+            <CharterActions {...actionProps} compact />
           </div>
         </CardContent>
       </Card>

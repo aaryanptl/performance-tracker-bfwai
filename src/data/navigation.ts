@@ -52,7 +52,7 @@ export const NAVIGATION: NavigationGroup[] = [
     items: [
       { label: "Dashboard", href: "/admin/dashboard", icon: Gauge, roles: ["admin"] },
       { label: "People", href: "/admin/people", icon: BriefcaseBusiness, roles: ["admin"] },
-      { label: "Cycles", href: "/admin/cycles", icon: Settings2, roles: ["admin"] },
+      { label: "Settings", href: "/admin/cycles", icon: Settings2, roles: ["admin"] },
       {
         label: "Calibration",
         href: "/admin/calibration",
