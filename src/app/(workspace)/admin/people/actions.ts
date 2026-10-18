@@ -529,6 +529,48 @@ export async function setPersonActive(
   return OK;
 }
 
+/** Permanently remove a roster row when no retained records require it. */
+export async function removePerson(personId: number): Promise<RosterActionResult> {
+  const context = await adminContext();
+  if (!isContext(context)) return context;
+  const { supabase, organizationId } = context;
+
+  if (personId === context.personId) {
+    return { error: "You cannot remove your own administrator profile." };
+  }
+
+  const { data: person, error: personError } = await supabase
+    .from("people")
+    .select("id")
+    .eq("id", personId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<{ id: number }>();
+  if (personError || !person) return { error: "That roster member could not be found." };
+
+  const { data: removed, error } = await supabase
+    .from("people")
+    .delete()
+    .eq("id", person.id)
+    .eq("organization_id", organizationId)
+    .select("id")
+    .maybeSingle<{ id: number }>();
+
+  if (error?.code === "23503") {
+    return {
+      error:
+        "This person is still linked to cycle, coaching, or performance history. Nothing was removed. Deactivate them instead to preserve those records.",
+    };
+  }
+  if (error) {
+    console.error("[roster] Person removal failed:", error.message);
+    return { error: "The person could not be removed." };
+  }
+  if (!removed) return { error: "The person could not be removed from this roster." };
+
+  refresh();
+  return OK;
+}
+
 /** Send a Supabase invite to a roster member who has no linked account. */
 export async function invitePerson(personId: number): Promise<RosterActionResult> {
   const context = await adminContext();

@@ -1,13 +1,21 @@
 "use client";
 
-import { UserMinus, UserPlus } from "lucide-react";
+import { Trash2, TriangleAlert, UserMinus, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 
-import { savePerson, setPersonActive } from "@/app/(workspace)/admin/people/actions";
+import { removePerson, savePerson, setPersonActive } from "@/app/(workspace)/admin/people/actions";
 import { PersonFormFields } from "@/app/components/person-form-fields";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -30,6 +38,8 @@ export function PersonEditSheet({
   units: RosterUnit[];
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -61,6 +71,20 @@ export function PersonEditSheet({
         setError(result.error);
         return;
       }
+      router.refresh();
+      close();
+    });
+  }
+
+  function confirmRemove() {
+    if (!person) return;
+    startTransition(async () => {
+      const result = await removePerson(person.id);
+      if (result.error) {
+        setRemoveError(result.error);
+        return;
+      }
+      setRemoveOpen(false);
       router.refresh();
       close();
     });
@@ -113,15 +137,77 @@ export function PersonEditSheet({
                 {person.active ? <UserMinus /> : <UserPlus />}
                 {person.active ? "Deactivate this person" : "Restore this person"}
               </Button>
+              <Button
+                className="w-full"
+                disabled={pending || isViewer}
+                onClick={() => {
+                  setRemoveError(null);
+                  setRemoveOpen(true);
+                }}
+                type="button"
+                variant="destructive"
+              >
+                <Trash2 />
+                Remove from people
+              </Button>
               <p className="text-xs text-muted-foreground">
                 {isViewer
-                  ? "You cannot deactivate your own account."
+                  ? "You cannot deactivate or remove your own administrator profile."
                   : "Deactivating keeps every record intact and only removes access."}
               </p>
             </SheetFooter>
           </form>
         ) : null}
       </SheetContent>
+      <Dialog
+        open={removeOpen}
+        onOpenChange={(open) => {
+          setRemoveOpen(open);
+          if (!open) setRemoveError(null);
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Remove {person?.name} from people?</DialogTitle>
+            <DialogDescription>
+              Review the effects before confirming this permanent action.
+            </DialogDescription>
+          </DialogHeader>
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertTitle>This permanently deletes their roster entry.</AlertTitle>
+            <AlertDescription>
+              Performance records are kept, though some activity links may be cleared. If required
+              records still reference this person, removal is blocked and nothing is deleted. Their
+              Supabase sign-in account remains, but they lose their Ascend profile and access. This
+              cannot be undone.
+            </AlertDescription>
+          </Alert>
+          {removeError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{removeError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <DialogFooter>
+            <Button
+              disabled={pending}
+              onClick={() => setRemoveOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={pending || !person || isViewer}
+              onClick={confirmRemove}
+              type="button"
+              variant="destructive"
+            >
+              {pending ? "Removing…" : "Permanently remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

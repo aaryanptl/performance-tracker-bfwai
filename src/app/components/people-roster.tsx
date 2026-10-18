@@ -48,7 +48,7 @@ const ROLE_BADGE = {
 export function PeopleRoster({ roster }: { roster: Roster }) {
   const { people, units, currentCycle, currentCycleParticipantIds, viewerId } = roster;
   const [query, setQuery] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
